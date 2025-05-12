@@ -1,0 +1,12 @@
+[IRC]
+Server = 
+Channel = #bots
+TLS = yes
+Port = 6697
+BridgeNickname = DiscordBridge
+
+[Discord]
+ClientID = 
+PublicKey = 
+ClientSecret = 
+Token = 
