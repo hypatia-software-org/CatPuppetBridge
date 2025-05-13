@@ -1,20 +1,61 @@
 import irc.bot
+import irc.client
 import ssl
 import irc.strings
 from irc.client import ip_numstr_to_quad, ip_quad_to_numstr
 from irc.connection import Factory
 
+class IRCListener(irc.client.SimpleIRCClient):
+    outQueue = None
+
+    def __init__(self, channel, nickname, server, port, outQueue):
+        ssl_factory = Factory(wrapper=ssl.wrap_socket)
+        self.reactor = irc.client.Reactor()
+        # TODO: ircname
+        self.connection = self.reactor.server().connect(
+            server, port, nickname, connect_factory=ssl_factory
+        )
+        self.outQueue = outQueue
+        self.channel = channel
+        self.connection.add_global_handler("welcome", self.on_welcome)
+        #self.connection.add_global_handler("privmsg", self.on_privmsg)
+        self.connection.add_global_handler("pubmsg", self.on_pubmsg)
+
+    def on_welcome(self, c, e):
+        print(f"Listener Connected! Joining {self.channel}...")
+        c.join(self.channel)
+
+    def on_pubmsg(self, c, event):
+        nickname = event.source.split('!', 1)[0]
+
+        data = {
+            'author': nickname,
+            'channel': event.target,
+            'content': event.arguments[0]
+        }
+        self.outQueue.put(data)
+
+    def start(self):
+        print("Starting IRC client loop...")
+        self.reactor.process_forever()
 
 class IRCBot(irc.bot.SingleServerIRCBot):
-    def __init__(self, channel, nickname, server, port=6667):
+
+    def __init__(self, channel, nickname, server, port):
         ssl_factory = Factory(wrapper=ssl.wrap_socket)
         irc.bot.SingleServerIRCBot.__init__(self, [(server, port)], nickname, nickname, connect_factory=ssl_factory)
+        #self.reactor.scheduler.execute_every(1, self.process_discord_queue)
         self.channel = channel
+
+    # def process_discord_queue(self):
+    #     for item in self.inQueue.queue:
+    #         print(item)
 
     def on_nicknameinuse(self, c, e):
         c.nick(c.get_nickname() + "_")
 
     def on_welcome(self, c, e):
+        print(f"Bot Connected! Joining {self.channel}...")
         c.join(self.channel)
 
     def on_privmsg(self, c, e):
@@ -72,7 +113,3 @@ class IRCBot(irc.bot.SingleServerIRCBot):
             )
         else:
             c.notice(nick, "Not understood: " + cmd)
-
-def start_bot(channel, nickname, server, port):
-    bot = IRCBot(channel, nickname, server, port)
-    bot.start()
