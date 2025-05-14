@@ -4,22 +4,94 @@ import ssl
 import irc.strings
 from irc.client import ip_numstr_to_quad, ip_quad_to_numstr
 from irc.connection import Factory
+import socket
+import sys
+
+
+class IRCPuppet(irc.client.SimpleIRCClient):
+    inQueue = None
+    channels = None
+    client_name = None
+    webirc_hostname = None
+    webirc_ip = None
+    webirc_password = None
+    nickname = None
+    server = None
+    port = None
+    connection = None
+
+    def __init__(self, channels, nickname, server, port, inQueue, discordToIRCLinks, webirc_password, webirc_ip):
+        super().__init__()
+        ssl_factory = Factory(wrapper=ssl.wrap_socket)
+        self.reactor = irc.client.Reactor()
+        # TODO: ircname
+#        self.connection = self.reactor.server().connect(
+#           server, port, nickname, connect_factory=ssl_factory
+#        )
+        # TODO: ircname
+
+        self.inQueue = inQueue
+        self.channels = channels
+        self.discordToIRCLinks = discordToIRCLinks
+
+        self.nickname = nickname
+        self.server = server
+        self.port = port
+        self.webirc_ip = webirc_ip
+        self.webirc_hostname = 'discord.bridge'
+        self.client_name = nickname
+        self.webirc_password = webirc_password
+
+        ssl_factory = Factory(wrapper=ssl.wrap_socket)
+        self.connection = self.reactor.server().connect(self.server, self.port, self.nickname,
+                                                        connect_factory=ssl_factory)
+        self.connection.send_raw(
+                f"WEBIRC {self.webirc_password} {self.webirc_hostname} {self.webirc_hostname} {self.webirc_ip}"
+            )
+
+        self.connection.add_global_handler("welcome", self.on_welcome)
+
+    def process_discord_queue(self):
+        if not self.inQueue.empty():
+            msg = self.inQueue.get()
+            print(msg)
+            if msg['command'] == 'send':
+                if str(msg['channel']) in self.discordToIRCLinks.keys():
+                    self.connection.privmsg(self.discordToIRCLinks[str(msg['channel'])], msg['data'])
+            if msg['command'] == 'die':
+                print('IRC Puppet dying, ' + self.nickname)
+                self.die('has gone offline on discord')
+
+    def on_welcome(self, c, e):
+        for channel in self.channels:
+            print(f"Puppet Joining {channel}...")
+            c.join(self.discordToIRCLinks[str(channel)])
+        self.reactor.scheduler.execute_every(1, self.process_discord_queue)
+
+    def start(self):
+        print("Starting IRC puppet loop...")
+        self.reactor.process_forever()
+
+    def die(self, msg):
+        self.connection.disconnect(msg)
+        sys.exit(0)
 
 class IRCListener(irc.client.SimpleIRCClient):
-    outQueue = None
+    out_queue = None
+    config = None
 
-    def __init__(self, channel, nickname, server, port, outQueue):
+    def __init__(self, channel, nickname, server, port, out_queue, config):
         ssl_factory = Factory(wrapper=ssl.wrap_socket)
         self.reactor = irc.client.Reactor()
         # TODO: ircname
         self.connection = self.reactor.server().connect(
             server, port, nickname, connect_factory=ssl_factory
         )
-        self.outQueue = outQueue
+        self.out_queue = out_queue
         self.channel = channel
         self.connection.add_global_handler("welcome", self.on_welcome)
-        #self.connection.add_global_handler("privmsg", self.on_privmsg)
         self.connection.add_global_handler("pubmsg", self.on_pubmsg)
+        self.config = config
 
     def on_welcome(self, c, e):
         print(f"Listener Connected! Joining {self.channel}...")
@@ -27,13 +99,13 @@ class IRCListener(irc.client.SimpleIRCClient):
 
     def on_pubmsg(self, c, event):
         nickname = event.source.split('!', 1)[0]
-
-        data = {
-            'author': nickname,
-            'channel': event.target,
-            'content': event.arguments[0]
-        }
-        self.outQueue.put(data)
+        if not nickname.endswith(self.config['puppet_suffix']):
+            data = {
+                'author': nickname,
+                'channel': event.target,
+                'content': event.arguments[0]
+            }
+            self.out_queue.put(data)
 
     def start(self):
         print("Starting IRC client loop...")
@@ -44,12 +116,7 @@ class IRCBot(irc.bot.SingleServerIRCBot):
     def __init__(self, channel, nickname, server, port):
         ssl_factory = Factory(wrapper=ssl.wrap_socket)
         irc.bot.SingleServerIRCBot.__init__(self, [(server, port)], nickname, nickname, connect_factory=ssl_factory)
-        #self.reactor.scheduler.execute_every(1, self.process_discord_queue)
         self.channel = channel
-
-    # def process_discord_queue(self):
-    #     for item in self.inQueue.queue:
-    #         print(item)
 
     def on_nicknameinuse(self, c, e):
         c.nick(c.get_nickname() + "_")

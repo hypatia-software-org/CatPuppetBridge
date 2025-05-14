@@ -4,12 +4,13 @@ import os.path
 import threading
 from queue import Queue
 
-from modules.IRCBridge import IRCBot, IRCListener
+from modules.IRCBridge import IRCBot, IRCListener, IRCPuppet
 from modules.DiscordBridge import DiscordBot
+from modules.AddressGenerator import ula_address_from_string
 
-def run_discord(discordToken, inQueue, outQueue, ircToDiscordLinks):
+def run_discord(discordToken, in_queue, out_queue, puppet_queue, irc_to_discord_links, guild_id):
     # Start Discord Bot
-    discordbot = DiscordBot(inQueue, outQueue, ircToDiscordLinks)
+    discordbot = DiscordBot(in_queue, out_queue, puppet_queue, irc_to_discord_links, guild_id)
     discordbot.run(discordToken)
 
 def run_ircbot(channel, nickname, server, port):
@@ -17,9 +18,14 @@ def run_ircbot(channel, nickname, server, port):
     ircbot = IRCBot(channel, nickname, server, port)
     ircbot.start()
 
-def run_irclistener(channel, nickname, server, port, outQueue):
+def run_irclistener(channel, nickname, server, port, out_queue, config):
     # Start IRC Listenr
-    ircbot = IRCListener(channel, nickname, server, port, outQueue)
+    ircbot = IRCListener(channel, nickname, server, port, out_queue, config)
+    ircbot.start()
+
+def run_ircpuppet(channels, nickname, server, port, in_queue, discord_to_irc_links, webirc_password, webirc_ip):
+    # Start IRC Puppet
+    ircbot = IRCPuppet(channels, nickname, server, port, in_queue, discord_to_irc_links, webirc_password, webirc_ip)
     ircbot.start()
 
 def main():
@@ -46,6 +52,8 @@ def main():
     channel = ircConfig['Channel']
     bridge_nickname = ircConfig['BridgeNickname']
     listener_nickname = ircConfig['ListenerNickname']
+    puppet_suffix = ircConfig['PuppetSuffix']
+    webirc_password = ircConfig['WebIRCPassword']
     server = ircConfig['Server']
     port = int(ircConfig['Port'])
 
@@ -55,24 +63,58 @@ def main():
 
     discordConfig = config['Discord']
     discordToken = discordConfig['Token']
-    discordToIRCLinks = {}
-    ircToDiscordLinks = {}
+    guild_id = discordConfig['GuildId']
+    discord_to_irc_links = {}
+    irc_to_discord_links = {}
     for entry in config['Links']:
-        discordToIRCLinks[entry] = config['Links'][entry]
-        ircToDiscordLinks[config['Links'][entry]] = entry
+        discord_to_irc_links[entry] = config['Links'][entry]
+        irc_to_discord_links[config['Links'][entry]] = entry
 
     discordToIRCQueue = Queue()
     ircToDiscordQueue = Queue()
-    discordbot_thread = threading.Thread(target=run_discord, args=[discordToken, ircToDiscordQueue, discordToIRCQueue, ircToDiscordLinks], daemon=True)
+    IrcPuppetQueue = Queue()
+
+    listener_config = {'puppet_suffix': puppet_suffix}
+
+    discordbot_thread = threading.Thread(target=run_discord, args=[discordToken, ircToDiscordQueue, discordToIRCQueue, IrcPuppetQueue, irc_to_discord_links, guild_id], daemon=True)
     discordbot_thread.start()
 
     ircbot_thread = threading.Thread(target=run_ircbot, args=[channel, bridge_nickname, server, port], daemon=True)
     ircbot_thread.start()
 
-    irclistener_thread = threading.Thread(target=run_irclistener, args=[channel, listener_nickname, server, port, ircToDiscordQueue], daemon=True)
+    irclistener_thread = threading.Thread(target=run_irclistener, args=[channel, listener_nickname, server, port, ircToDiscordQueue, listener_config], daemon=True)
     irclistener_thread.start()
 
     threads = [discordbot_thread, ircbot_thread, irclistener_thread]
+
+    PuppetDict = {}
+    puppet_main_queues = {}
+
+    sentinel = object()
+    for user in iter(IrcPuppetQueue.get, sentinel):
+        if user['command'] == 'active':
+            # Does the puppet already exist? Start it! Otherwise do nothing
+            if user['id'] not in PuppetDict.keys():
+                print("Starting IRC Puppet: " + user['nick'])
+                puppet_main_queues[user['id']] = Queue()
+                puppet_nickname = user['nick'] + puppet_suffix
+                ircpuppet_thread = threading.Thread(
+                    target=run_ircpuppet,
+                    args=[user['data'], puppet_nickname, server, port,
+                          puppet_main_queues[user['id']], discord_to_irc_links,
+                          webirc_password, ula_address_from_string(puppet_nickname)],
+                    daemon=True)
+                ircpuppet_thread.start()
+
+                PuppetDict[user['id']] = ircpuppet_thread
+        if user['command'] == 'die':
+            print("Stopping IRC Puppet: " + user['nick'])
+            puppet_main_queues[user['id']].put(user)
+            PuppetDict[user['id']].join()
+            del PuppetDict[user['id']]
+        if user['command'] == 'send':
+            print("Send found")
+            puppet_main_queues[user['id']].put(user)
     for t in threads:
         t.join()
 
