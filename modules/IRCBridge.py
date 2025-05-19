@@ -7,6 +7,7 @@ from irc.connection import Factory
 import socket
 import sys
 import threading
+import logging
 
 
 class IRCPuppet(irc.client.SimpleIRCClient):
@@ -174,6 +175,7 @@ class IRCListener(irc.client.SimpleIRCClient):
     def on_pubmsg(self, c, event):
         nickname = event.source.split('!', 1)[0]
         if not nickname.endswith(self.config['puppet_suffix']):
+            print("Irc message found, adding to queue")
             data = {
                 'author': nickname,
                 'channel': event.target,

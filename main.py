@@ -2,6 +2,7 @@ import configparser
 import sys
 import os.path
 import threading
+import logging
 from queue import Queue
 
 from modules.IRCBridge import IRCBot, IRCListener, IRCPuppet

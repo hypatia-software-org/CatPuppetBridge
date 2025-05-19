@@ -3,6 +3,7 @@ import discord
 import threading
 import time
 import re
+import queue
 
 
 class DiscordBot(discord.Client):
@@ -124,8 +125,8 @@ class DiscordBot(discord.Client):
 
     async def process_queue(self):
         # Periodically check the queue and send messages
-        sentinel = object()
-        for msg in iter(self.inQueue.get, sentinel):
+        try:
+            msg = self.inQueue.get()
             print(msg)
             print("msg found")
             channel = None
@@ -149,6 +150,9 @@ class DiscordBot(discord.Client):
                 if self.mention_lookup_re:
                     processed_message = self.mention_lookup_re.sub(lambda match: self.mention_lookup[match.group(0)].mention, msg['content'])
                 await webhook.send(processed_message, username=msg['author'], avatar_url='https://robohash.org/' + msg['author'] + '?set=set4')
+        except queue.Empty:
+            pass
+        await asyncio.sleep(0.01)
 
     async def replace_mentions(self, message):
         mention_pattern = r'<@!?(\d+)>'
