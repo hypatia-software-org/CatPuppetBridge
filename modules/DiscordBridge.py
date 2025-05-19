@@ -4,6 +4,7 @@ import threading
 import time
 import re
 import queue
+import logging
 
 
 class DiscordBot(discord.Client):
@@ -37,7 +38,7 @@ class DiscordBot(discord.Client):
         super().__init__(intents=intents)
 
     async def on_ready(self):
-        print(f'We have logged in as {self.user}')
+        logging.info(f'We have logged in as {self.user}')
         self.discordChannelMapping = {}
         for channel in self.ircToDiscordLinks:
             self.discordChannelMapping[channel] = await self.fetch_channel(self.ircToDiscordLinks[channel])
@@ -58,14 +59,14 @@ class DiscordBot(discord.Client):
 
     async def activate_puppet(self, user):
         if not self.ready:
-            print("Not ready")
+            logging.warn("Discord not ready yet")
         channels =  await self.accessible_channels(user.id)
         await self.send_irc_command(user, 'active', channels)
 
         self.active_puppets.append(user.id)
 
         await self.compile_mention_lookup_re(user)
-        print(f"{user.display_name} is now active! (status: {user.status})")
+        logging.info(f"{user.display_name} is now active! (status: {user.status})")
 
     async def compile_mention_lookup_re(self, user: discord.Member = None):
         if user:
@@ -78,7 +79,7 @@ class DiscordBot(discord.Client):
             self.active_puppets.append(after.id)
             await compile_mention_lookup_re(after)
             await self.send_irc_command(after, 'nick', None)
-            print(f"{before.name} changed display name from '{before.display_name}' to '{after.display_name}'")
+            logging.info(f"{before.name} changed display name from '{before.display_name}' to '{after.display_name}'")
 
     async def on_presence_update(self, before, after):
         # Make sure we are ready:
@@ -99,10 +100,10 @@ class DiscordBot(discord.Client):
         if previously_active and now_inactive:
                 if after.id in self.active_puppets:
                     await self.send_irc_command(after, 'afk')
-                    print(f"{after.display_name} is now offline! (status: {after.status})")
+                    logging.info(f"{after.display_name} is now offline! (status: {after.status})")
 
     async def send_irc_command(self, user, command, data=None, channel=None):
-        print('adding cmd to queue from discord: ' + command)
+        logging.info('adding cmd to queue from discord: ' + command)
         self.PuppetQueue.put({
             'nick': self.irc_safe_nickname(user.display_name),
             'display_name': user.display_name,
@@ -122,14 +123,12 @@ class DiscordBot(discord.Client):
             await self.compile_mention_lookup_re()
 
             await self.send_irc_command(member, 'die')
-            print(f"{member.display_name} has left!")
+            logging.info(f"{member.display_name} has left!")
 
     async def process_queue(self):
         # Periodically check the queue and send messages
         try:
             msg = self.inQueue.get(timeout=0.5)
-            print(msg)
-            print("msg found")
             channel = None
 
             if msg['channel'] in self.discordChannelMapping:

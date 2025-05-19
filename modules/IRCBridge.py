@@ -7,6 +7,7 @@ from irc.connection import Factory
 import socket
 import sys
 import threading
+import logging
 import time
 
 
@@ -88,11 +89,11 @@ class IRCPuppet(irc.client.SimpleIRCClient):
                 self.end_thread = True
                 self.die('has left discord')
             else:
-                print("ERROR: Queue command '" + msg['command'] + "' not found!")
+                logging.error("ERROR: Queue command '" + msg['command'] + "' not found!")
 
     def on_welcome(self, c, e):
         for channel in self.channels:
-            print("Puppet Joining " + self.discordToIRCLinks[str(channel)])
+            logging.info("Puppet Joining " + self.discordToIRCLinks[str(channel)])
             c.join(self.discordToIRCLinks[str(channel)])
         #self.reactor.scheduler.execute_every(1, self.process_discord_queue)
         self.queue_thread = threading.Thread(target=self.process_discord_queue, daemon=True)
@@ -133,10 +134,10 @@ class IRCPuppet(irc.client.SimpleIRCClient):
         self.nickname = c.get_nickname()
 
     def start(self):
-        print("Starting IRC puppet loop for puppet " + self.nickname)
+        logging.info("Starting IRC puppet loop for puppet " + self.nickname)
         while not self.end_thread:
             self.reactor.process_once(timeout=0.2)
-        print('IRC Puppet killing main thread, ' + self.nickname)
+        logging.info('IRC Puppet killing main thread, ' + self.nickname)
         sys.exit(0)
         #self.reactor.process_forever()
 
@@ -151,7 +152,7 @@ class IRCPuppet(irc.client.SimpleIRCClient):
         )
 
     def die(self, msg):
-        print('IRC Puppet dying, ' + self.nickname)
+        logging.info('IRC Puppet dying, ' + self.nickname)
         self.connection.disconnect(msg)
         sys.exit(0)
 
@@ -173,13 +174,13 @@ class IRCListener(irc.client.SimpleIRCClient):
         self.config = config
 
     def on_welcome(self, c, e):
-        print(f"Listener Connected! Joining {self.channel}...")
+        logging.info(f"Listener Connected! Joining {self.channel}...")
         c.join(self.channel)
 
     def on_pubmsg(self, c, event):
         nickname = event.source.split('!', 1)[0]
         if not nickname.endswith(self.config['puppet_suffix']):
-            print("Irc message found, adding to queue")
+            logging.info("Irc message found, adding to queue")
             data = {
                 'author': nickname,
                 'channel': event.target,
@@ -188,7 +189,7 @@ class IRCListener(irc.client.SimpleIRCClient):
             self.out_queue.put(data)
 
     def start(self):
-        print("Starting IRC client loop...")
+        logging.info("Starting IRC client loop...")
         self.reactor.process_forever()
 
 class IRCBot(irc.bot.SingleServerIRCBot):
@@ -202,7 +203,7 @@ class IRCBot(irc.bot.SingleServerIRCBot):
         c.nick(c.get_nickname() + "_")
 
     def on_welcome(self, c, e):
-        print(f"Bot Connected! Joining {self.channel}...")
+        logging.info(f"Bot Connected! Joining {self.channel}...")
         c.join(self.channel)
 
     def on_privmsg(self, c, e):
