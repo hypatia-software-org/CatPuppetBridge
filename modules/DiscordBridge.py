@@ -177,7 +177,6 @@ class DiscordBot(discord.Client):
         accessible = []
 
         for channel in self.discordChannelMapping:
-            print(self.discordChannelMapping[channel].name)
             if isinstance(self.discordChannelMapping[channel], discord.abc.GuildChannel):
                 perms = self.discordChannelMapping[channel].permissions_for(member)
                 if perms.view_channel:
