@@ -6,6 +6,7 @@ from irc.client import ip_numstr_to_quad, ip_quad_to_numstr
 from irc.connection import Factory
 import socket
 import sys
+import threading
 
 
 class IRCPuppet(irc.client.SimpleIRCClient):
@@ -56,21 +57,41 @@ class IRCPuppet(irc.client.SimpleIRCClient):
             msg = self.inQueue.get()
             print(msg)
             if msg['command'] == 'send':
+                print("Found send, sending...")
                 if str(msg['channel']) in self.discordToIRCLinks.keys():
                     self.connection.privmsg(self.discordToIRCLinks[str(msg['channel'])], msg['data'])
-            if msg['command'] == 'die':
+            elif msg['command'] == 'afk':
+                self.afk()
+            elif msg['command'] == 'unafk':
+                self.unafk()
+            elif msg['command'] == 'die':
                 print('IRC Puppet dying, ' + self.nickname)
-                self.die('has gone offline on discord')
+                self.die('has left discord')
+            else:
+                print("ERROR: Queue command '" + msg['command'] + "' not found!")
 
     def on_welcome(self, c, e):
         for channel in self.channels:
             print(f"Puppet Joining {channel}...")
             c.join(self.discordToIRCLinks[str(channel)])
         self.reactor.scheduler.execute_every(1, self.process_discord_queue)
+        #self.queue_thread = threading.Thread(target=self.process_discord_queue, daemon=True)
+        #self.queue_thread.start()
+        c.mode(c.get_nickname(), "+R")
 
     def start(self):
         print("Starting IRC puppet loop...")
         self.reactor.process_forever()
+
+    def afk(self):
+        self.connection.send_raw(
+            f"AWAY User is away on discord"
+        )
+
+    def unafk(self):
+        self.connection.send_raw(
+            f"AWAY"
+        )
 
     def die(self, msg):
         self.connection.disconnect(msg)

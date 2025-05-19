@@ -8,9 +8,9 @@ from modules.IRCBridge import IRCBot, IRCListener, IRCPuppet
 from modules.DiscordBridge import DiscordBot
 from modules.AddressGenerator import ula_address_from_string
 
-def run_discord(discordToken, in_queue, out_queue, puppet_queue, irc_to_discord_links, guild_id):
+def run_discord(discordToken, in_queue, out_queue, puppet_queue, irc_to_discord_links, guild_id, listener_config):
     # Start Discord Bot
-    discordbot = DiscordBot(in_queue, out_queue, puppet_queue, irc_to_discord_links, guild_id)
+    discordbot = DiscordBot(in_queue, out_queue, puppet_queue, irc_to_discord_links, guild_id, listener_config)
     discordbot.run(discordToken)
 
 def run_ircbot(channel, nickname, server, port):
@@ -76,7 +76,7 @@ def main():
 
     listener_config = {'puppet_suffix': puppet_suffix}
 
-    discordbot_thread = threading.Thread(target=run_discord, args=[discordToken, ircToDiscordQueue, discordToIRCQueue, IrcPuppetQueue, irc_to_discord_links, guild_id], daemon=True)
+    discordbot_thread = threading.Thread(target=run_discord, args=[discordToken, ircToDiscordQueue, discordToIRCQueue, IrcPuppetQueue, irc_to_discord_links, guild_id, listener_config], daemon=True)
     discordbot_thread.start()
 
     ircbot_thread = threading.Thread(target=run_ircbot, args=[channel, bridge_nickname, server, port], daemon=True)
@@ -112,8 +112,7 @@ def main():
             puppet_main_queues[user['id']].put(user)
             PuppetDict[user['id']].join()
             del PuppetDict[user['id']]
-        if user['command'] == 'send':
-            print("Send found")
+        if user['command'] == 'send' or user['command'] == 'afk' or user['command'] == 'unafk':
             puppet_main_queues[user['id']].put(user)
     for t in threads:
         t.join()
