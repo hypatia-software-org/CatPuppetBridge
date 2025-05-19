@@ -84,7 +84,7 @@ class IRCPuppet(irc.client.SimpleIRCClient):
                 self.unafk()
             elif msg['command'] == 'nick':
                 self.nickname = nickname
-                self.connection.nick(msg['display_name'])
+                self.connection.nick(msg['irc_nick'])
             elif msg['command'] == 'die':
                 self.end_thread = True
                 self.die('has left discord')

@@ -21,6 +21,7 @@ class DiscordBot(discord.Client):
     listener_config = None
     ready = False
     process_queue_thread = None
+    max_puppet_username = 30
 
     def __init__(self, inQueue, outQueue, PuppetQueue, ircToDiscordLinks, guild_id, listener_config):
         intents = discord.Intents.default()
@@ -58,6 +59,20 @@ class DiscordBot(discord.Client):
         valid_nick = re.sub(r"[^A-Za-z0-9" + allowed_special + "]", "", nickname)
         return valid_nick
 
+    async def generate_irc_nickname(self, user):
+        username = user.name
+        display_name = user.display_name
+        if len(display_name) + len(username) + 2 > self.max_puppet_username:
+            # +5, two for [] and 3 for prefix
+            # TODO: Make this dynamic
+            remove_len = (len(display_name) + len(username) + 5) - self.max_puppet_username
+            display_name = display_name[:len(display_name)-remove_len]
+        #still too big? shorten the username too (sheesh)
+        if len(display_name) + len(username) + 2 > self.max_puppet_username:
+            remove_len = (len(display_name) + len(username) + 5) - self.max_puppet_username
+            username = username[:len(username)-remove_len]
+        return "{display_name}[{username}]".format(display_name=display_name, username=username)
+            
     async def activate_puppet(self, user):
         if not self.ready:
             logging.warn("Discord not ready yet")
@@ -71,7 +86,8 @@ class DiscordBot(discord.Client):
 
     async def compile_mention_lookup_re(self, user: discord.Member = None):
         if user:
-            self.mention_lookup[user.display_name + self.listener_config['puppet_suffix']] = user
+            irc_name = await self.generate_irc_nickname(user)
+            self.mention_lookup[irc_name + self.listener_config['puppet_suffix']] = user
         self.mention_lookup_re = re.compile(r'\b(' + '|'.join(map(re.escape, self.mention_lookup.keys())) + r')\b')
 
     async def on_member_update(before: discord.Member, after: discord.Member):
@@ -108,6 +124,7 @@ class DiscordBot(discord.Client):
         self.PuppetQueue.put({
             'nick': self.irc_safe_nickname(user.display_name),
             'display_name': user.display_name,
+            'irc_nick': await self.generate_irc_nickname(user),
             'name': user.name,
             'id': user.id,
             'channel': channel,
@@ -120,7 +137,7 @@ class DiscordBot(discord.Client):
         if member.id in self.active_puppets:
             # Update lookup table
             self.active_puppets.remove(member.id)
-            del self.mention_lookup[member.display_name + self.listener_config['puppet_suffix']]
+            del self.mention_lookup[member.irc_nick + self.listener_config['puppet_suffix']]
             await self.compile_mention_lookup_re()
 
             await self.send_irc_command(member, 'die')
@@ -166,7 +183,7 @@ class DiscordBot(discord.Client):
             new_message += message[last_end:match.start()]
             try:
                 user = await self.fetch_user(user_id)
-                new_message += self.irc_safe_nickname(user.display_name) + self.listener_config['puppet_suffix']
+                new_message += self.irc_safe_nickname(user.irc_nick) + self.listener_config['puppet_suffix']
             except Exception:
                 new_message += match.group(0)  # fallback: keep original mention
             last_end = match.end()
@@ -206,6 +223,7 @@ class DiscordBot(discord.Client):
             data = {
                 'nick': self.irc_safe_nickname(message.author.display_name),
                 'display_name': message.author.display_name,
+                'irc_nick': await self.generate_irc_nickname(message.author),
                 'name': message.author.name,
                 'id': message.author.id,
                 'channel': message.channel.id,
