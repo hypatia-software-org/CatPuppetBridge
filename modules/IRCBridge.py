@@ -49,9 +49,16 @@ class IRCPuppet(irc.client.SimpleIRCClient):
             )
 
         self.connection.add_global_handler("welcome", self.on_welcome)
+        self.connection.add_global_handler("on_privmsg", self.on_privmsg)
 
-    def on_privmsg(self, c, e):
-        print("PRIV MESSAGE STUB")
+    def on_privmsg(self, c, event):
+        nickname = event.source.split('!', 1)[0]
+        data = {
+            'author': nickname,
+            'channel': self.nickname,
+            'content': event.arguments[0]
+        }
+        self.out_queue.put(data)
 
     def process_discord_queue(self):
         #if not self.inQueue.empty():

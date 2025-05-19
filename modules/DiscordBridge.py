@@ -1,5 +1,6 @@
-import discord
 import asyncio
+import discord
+import threading
 import time
 import re
 
@@ -17,6 +18,7 @@ class DiscordBot(discord.Client):
     mention_lookup_re = None
     listener_config = None
     ready = False
+    process_queue_thread = None
 
     def __init__(self, inQueue, outQueue, PuppetQueue, ircToDiscordLinks, guild_id, listener_config):
         intents = discord.Intents.default()
@@ -122,32 +124,31 @@ class DiscordBot(discord.Client):
 
     async def process_queue(self):
         # Periodically check the queue and send messages
-        while True:
-            if not self.inQueue.empty():
-                msg = self.inQueue.get()
-                channel = None
+        sentinel = object()
+        for msg in iter(self.inQueue.get, sentinel):
+            print(msg)
+            print("msg found")
+            channel = None
 
-                if msg['channel'] in self.discordChannelMapping:
-                    channel = self.discordChannelMapping[msg['channel']]
+            if msg['channel'] in self.discordChannelMapping:
+                channel = self.discordChannelMapping[msg['channel']]
 
-                if channel:
-                    webhooks = await channel.webhooks()
-                    webhook_name = 'CatPuppetBridge'
-                    webhook = None
-                    for webhook in webhooks:
-                        if webhook.name == webhook_name:
-                            webhook = webhook
-                            break
-                    if webhook == None:
-                        webhook = await channel.create_webhook(name='CatPuppetBridge')
+            if channel:
+                webhooks = await channel.webhooks()
+                webhook_name = 'CatPuppetBridge'
+                webhook = None
+                for webhook in webhooks:
+                    if webhook.name == webhook_name:
+                        webhook = webhook
+                        break
+                if webhook == None:
+                    webhook = await channel.create_webhook(name='CatPuppetBridge')
 
-                    # detect mentions
-                    processed_message = msg['content']
-                    if self.mention_lookup_re:
-                        processed_message = self.mention_lookup_re.sub(lambda match: self.mention_lookup[match.group(0)].mention, msg['content'])
-                    await webhook.send(processed_message, username=msg['author'], avatar_url='https://robohash.org/' + msg['author'] + '?set=set4')
-
-            await asyncio.sleep(1)  # Check the queue every 1 second
+                # detect mentions
+                processed_message = msg['content']
+                if self.mention_lookup_re:
+                    processed_message = self.mention_lookup_re.sub(lambda match: self.mention_lookup[match.group(0)].mention, msg['content'])
+                await webhook.send(processed_message, username=msg['author'], avatar_url='https://robohash.org/' + msg['author'] + '?set=set4')
 
     async def replace_mentions(self, message):
         mention_pattern = r'<@!?(\d+)>'
