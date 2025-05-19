@@ -30,13 +30,16 @@ def run_ircpuppet(channels, nickname, server, port, in_queue, discord_to_irc_lin
     ircbot.start()
 
 def main():
+    FORMAT = "%(asctime)s %(levelname)s %(module)s %(message)s"
+    logging.basicConfig(format=FORMAT)
+
     config_filename = 'catbridge.ini'
     if os.path.isfile(config_filename):
         config_path = os.getcwd() + '/' + config_filename
     elif os.path.isfile('/etc/' + config_filename):
         config_path = '/etc/' + config_filename
     else:
-        print("Error: catbridge.ini missing.")
+        logging.error("Error: catbridge.ini missing.")
         sys.exit(1)
 
     config = configparser.ConfigParser()
@@ -46,7 +49,7 @@ def main():
         raise(e)
 
     if 'IRC' not in config:
-        print("Error: IRC block missing in " + config_path)
+        logging.error("Error: IRC block missing in " + config_path)
         sys.exit(1)
 
     ircConfig = config['IRC']
@@ -59,7 +62,7 @@ def main():
     port = int(ircConfig['Port'])
 
     if 'Discord' not in config:
-        print("Error: Discord block missing in " + config_path)
+        logging.error("Error: Discord block missing in " + config_path)
         sys.exit(1)
 
     discordConfig = config['Discord']
@@ -96,7 +99,7 @@ def main():
         if user['command'] == 'active':
             # Does the puppet already exist? Start it! Otherwise do nothing
             if user['id'] not in PuppetDict.keys():
-                print("Starting IRC Puppet: " + user['nick'])
+                logging.info("Starting IRC Puppet: " + user['nick'])
                 puppet_main_queues[user['id']] = Queue()
                 puppet_nickname = user['nick'] + puppet_suffix
                 ircpuppet_thread = threading.Thread(
@@ -109,7 +112,7 @@ def main():
 
                 PuppetDict[user['id']] = ircpuppet_thread
         if user['command'] == 'die':
-            print("Stopping IRC Puppet: " + user['nick'])
+            logging.info("Stopping IRC Puppet: " + user['nick'])
             puppet_main_queues[user['id']].put(user)
             PuppetDict[user['id']].join()
             del PuppetDict[user['id']]
