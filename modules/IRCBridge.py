@@ -7,7 +7,7 @@ from irc.connection import Factory
 import socket
 import sys
 import threading
-import logging
+import time
 
 
 class IRCPuppet(irc.client.SimpleIRCClient):
@@ -22,6 +22,7 @@ class IRCPuppet(irc.client.SimpleIRCClient):
     port = None
     connection = None
     end_thread = False
+    ready = False
 
     def __init__(self, channels, nickname, server, port, inQueue, discordToIRCLinks, webirc_password, webirc_ip):
         super().__init__()
@@ -63,6 +64,8 @@ class IRCPuppet(irc.client.SimpleIRCClient):
 
     def process_discord_queue(self):
         #if not self.inQueue.empty():
+        while not self.ready:
+            time.sleep(1)
         sentinel = object()
         for msg in iter(self.inQueue.get, sentinel):
             #msg = self.inQueue.get()
@@ -85,16 +88,17 @@ class IRCPuppet(irc.client.SimpleIRCClient):
                 self.end_thread = True
                 self.die('has left discord')
             else:
-                logging.error("ERROR: Queue command '" + msg['command'] + "' not found!")
+                print("ERROR: Queue command '" + msg['command'] + "' not found!")
 
     def on_welcome(self, c, e):
         for channel in self.channels:
-            logging.info("Puppet Joining " + self.discordToIRCLinks[str(channel)])
+            print("Puppet Joining " + self.discordToIRCLinks[str(channel)])
             c.join(self.discordToIRCLinks[str(channel)])
         #self.reactor.scheduler.execute_every(1, self.process_discord_queue)
         self.queue_thread = threading.Thread(target=self.process_discord_queue, daemon=True)
         self.queue_thread.start()
         c.mode(c.get_nickname(), "+R")
+        self.ready = True
 
     def msg_reserved_bytes(self, target):
         msg = ":<{nick}>!<{user}>@<{host}> PRIVMSG <{target}> :".format(nick=self.nickname, user=self.nickname, host=self.webirc_hostname, target=target)
@@ -129,10 +133,10 @@ class IRCPuppet(irc.client.SimpleIRCClient):
         self.nickname = c.get_nickname()
 
     def start(self):
-        logging.info("Starting IRC puppet loop for puppet " + self.nickname)
+        print("Starting IRC puppet loop for puppet " + self.nickname)
         while not self.end_thread:
             self.reactor.process_once(timeout=0.2)
-        logging.info('IRC Puppet killing main thread, ' + self.nickname)
+        print('IRC Puppet killing main thread, ' + self.nickname)
         sys.exit(0)
         #self.reactor.process_forever()
 

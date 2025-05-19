@@ -102,6 +102,7 @@ class DiscordBot(discord.Client):
                     print(f"{after.display_name} is now offline! (status: {after.status})")
 
     async def send_irc_command(self, user, command, data=None, channel=None):
+        print('adding cmd to queue from discord: ' + command)
         self.PuppetQueue.put({
             'nick': self.irc_safe_nickname(user.display_name),
             'display_name': user.display_name,
@@ -126,7 +127,7 @@ class DiscordBot(discord.Client):
     async def process_queue(self):
         # Periodically check the queue and send messages
         try:
-            msg = self.inQueue.get()
+            msg = self.inQueue.get(timeout=0.5)
             print(msg)
             print("msg found")
             channel = None
