@@ -20,15 +20,12 @@ class IRCPuppet(irc.client.SimpleIRCClient):
     server = None
     port = None
     connection = None
+    end_thread = False
 
     def __init__(self, channels, nickname, server, port, inQueue, discordToIRCLinks, webirc_password, webirc_ip):
         super().__init__()
         ssl_factory = Factory(wrapper=ssl.wrap_socket)
         self.reactor = irc.client.Reactor()
-        # TODO: ircname
-#        self.connection = self.reactor.server().connect(
-#           server, port, nickname, connect_factory=ssl_factory
-#        )
         # TODO: ircname
 
         self.inQueue = inQueue
@@ -42,6 +39,7 @@ class IRCPuppet(irc.client.SimpleIRCClient):
         self.webirc_hostname = 'discord.bridge'
         self.client_name = nickname
         self.webirc_password = webirc_password
+        self.end_thread = False
 
         ssl_factory = Factory(wrapper=ssl.wrap_socket)
         self.connection = self.reactor.server().connect(self.server, self.port, self.nickname,
@@ -52,9 +50,14 @@ class IRCPuppet(irc.client.SimpleIRCClient):
 
         self.connection.add_global_handler("welcome", self.on_welcome)
 
+    def on_privmsg(self, c, e):
+        print("PRIV MESSAGE STUB")
+
     def process_discord_queue(self):
-        if not self.inQueue.empty():
-            msg = self.inQueue.get()
+        #if not self.inQueue.empty():
+        sentinel = object()
+        for msg in iter(self.inQueue.get, sentinel):
+            #msg = self.inQueue.get()
             print(msg)
             if msg['command'] == 'send':
                 print("Found send, sending...")
@@ -64,8 +67,11 @@ class IRCPuppet(irc.client.SimpleIRCClient):
                 self.afk()
             elif msg['command'] == 'unafk':
                 self.unafk()
+            elif msg['command'] == 'nick':
+                self.nickname = nickname
+                self.connection.nick(msg['display_name'])
             elif msg['command'] == 'die':
-                print('IRC Puppet dying, ' + self.nickname)
+                self.end_thread = True
                 self.die('has left discord')
             else:
                 print("ERROR: Queue command '" + msg['command'] + "' not found!")
@@ -74,14 +80,23 @@ class IRCPuppet(irc.client.SimpleIRCClient):
         for channel in self.channels:
             print(f"Puppet Joining {channel}...")
             c.join(self.discordToIRCLinks[str(channel)])
-        self.reactor.scheduler.execute_every(1, self.process_discord_queue)
-        #self.queue_thread = threading.Thread(target=self.process_discord_queue, daemon=True)
-        #self.queue_thread.start()
+        #self.reactor.scheduler.execute_every(1, self.process_discord_queue)
+        self.queue_thread = threading.Thread(target=self.process_discord_queue, daemon=True)
+        self.queue_thread.start()
         c.mode(c.get_nickname(), "+R")
 
+    #TODO relay to discord listner
+    def on_nicknameinuse(self, c, e):
+        c.nick(c.get_nickname() + "_")
+        self.nickname = c.get_nickname()
+
     def start(self):
-        print("Starting IRC puppet loop...")
-        self.reactor.process_forever()
+        print("Starting IRC puppet loop for puppet " + self.nickname)
+        while not self.end_thread:
+            self.reactor.process_once(timeout=0.2)
+        print('IRC Puppet killing main thread, ' + self.nickname)
+        sys.exit(0)
+        #self.reactor.process_forever()
 
     def afk(self):
         self.connection.send_raw(
@@ -94,6 +109,7 @@ class IRCPuppet(irc.client.SimpleIRCClient):
         )
 
     def die(self, msg):
+        print('IRC Puppet dying, ' + self.nickname)
         self.connection.disconnect(msg)
         sys.exit(0)
 
@@ -157,32 +173,11 @@ class IRCBot(irc.bot.SingleServerIRCBot):
             self.do_command(e, a[1].strip())
         return
 
-    def on_dccmsg(self, c, e):
-        # non-chat DCC messages are raw bytes; decode as text
-        text = e.arguments[0].decode('utf-8')
-        c.privmsg("You said: " + text)
-
-    def on_dccchat(self, c, e):
-        if len(e.arguments) != 2:
-            return
-        args = e.arguments[1].split()
-        if len(args) == 4:
-            try:
-                address = ip_numstr_to_quad(args[2])
-                port = int(args[3])
-            except ValueError:
-                return
-            self.dcc_connect(address, port)
-
     def do_command(self, e, cmd):
         nick = e.source.nick
         c = self.connection
 
-        if cmd == "disconnect":
-            self.disconnect()
-        elif cmd == "die":
-            self.die()
-        elif cmd == "stats":
+        if cmd == "stats":
             for chname, chobj in self.channels.items():
                 c.notice(nick, "--- Channel statistics ---")
                 c.notice(nick, "Channel: " + chname)
@@ -192,12 +187,5 @@ class IRCBot(irc.bot.SingleServerIRCBot):
                 c.notice(nick, "Opers: " + ", ".join(opers))
                 voiced = sorted(chobj.voiced())
                 c.notice(nick, "Voiced: " + ", ".join(voiced))
-        elif cmd == "dcc":
-            dcc = self.dcc_listen()
-            c.ctcp(
-                "DCC",
-                nick,
-                f"CHAT chat {ip_quad_to_numstr(dcc.localaddress)} {dcc.localport}",
-            )
         else:
             c.notice(nick, "Not understood: " + cmd)

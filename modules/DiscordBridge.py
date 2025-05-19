@@ -57,20 +57,26 @@ class DiscordBot(discord.Client):
         if not self.ready:
             print("Not ready")
         channels =  await self.accessible_channels(user.id)
-        self.PuppetQueue.put({
-            'nick': self.irc_safe_nickname(user.display_name),
-            'display_name': user.display_name,
-            'name': user.name,
-            'id': user.id,
-            'command': 'active',
-            'data': channels,
-            'timestamp': time.time()
-        })
+        await self.send_irc_command(user, 'active', channels)
+
         self.active_puppets.append(user.id)
-        self.mention_lookup[user.display_name + self.listener_config['puppet_suffix']] = user
-        self.mention_lookup_re = re.compile(r'\b(' + '|'.join(map(re.escape, self.mention_lookup.keys())) + r')\b')
+
+        await self.compile_mention_lookup_re(user)
         print(f"{user.display_name} is now active! (status: {user.status})")
-    
+
+    async def compile_mention_lookup_re(self, user: discord.Member = None):
+        if user:
+            self.mention_lookup[user.display_name + self.listener_config['puppet_suffix']] = user
+        self.mention_lookup_re = re.compile(r'\b(' + '|'.join(map(re.escape, self.mention_lookup.keys())) + r')\b')
+
+    async def on_member_update(before: discord.Member, after: discord.Member):
+        if before.display_name != after.display_name:
+            self.active_puppets.remove(before.id)
+            self.active_puppets.append(after.id)
+            await compile_mention_lookup_re(after)
+            await self.send_irc_command(after, 'nick', None)
+            print(f"{before.name} changed display name from '{before.display_name}' to '{after.display_name}'")
+
     async def on_presence_update(self, before, after):
         # Make sure we are ready:
         if not self.ready:
@@ -84,42 +90,35 @@ class DiscordBot(discord.Client):
 
         if previously_inactive and now_active:
             if after.id in self.active_puppets:
-                self.PuppetQueue.put({
-                    'nick': self.irc_safe_nickname(after.display_name),
-                    'display_name': after.display_name,
-                    'name': after.name,
-                    'id': after.id,
-                    'command': 'unafk',
-                    'data': None,
-                    'timestamp': time.time()
-                })
+                await self.send_irc_command(after, 'unafk')
             else:
                 await self.activate_puppet(after)
         if previously_active and now_inactive:
-            if after.id in self.active_puppets:
-                self.PuppetQueue.put({
-                    'nick': self.irc_safe_nickname(after.display_name),
-                    'display_name': after.display_name,
-                    'name': after.name,
-                    'id': after.id,
-                    'command': 'afk',
-                    'data': None,
-                    'timestamp': time.time()
-                })
-                print(f"{after.display_name} is now offline! (status: {after.status})")
+                if after.id in self.active_puppets:
+                    await self.send_irc_command(after, 'afk')
+                    print(f"{after.display_name} is now offline! (status: {after.status})")
 
-    async def on_member_remove(member):
-            if after.id in self.active_puppets:
-                self.PuppetQueue.put({
-                    'nick': self.irc_safe_nickname(member.display_name),
-                    'display_name': member.display_name,
-                    'name': member.name,
-                    'id': member.id,
-                    'command': 'die',
-                    'data': None,
-                    'timestamp': time.time()
-                })
-                print(f"{member.display_name} has left!")
+    async def send_irc_command(self, user, command, data=None, channel=None):
+        self.PuppetQueue.put({
+            'nick': self.irc_safe_nickname(user.display_name),
+            'display_name': user.display_name,
+            'name': user.name,
+            'id': user.id,
+            'channel': channel,
+            'command': command,
+            'data': data,
+            'timestamp': time.time()
+        })
+
+    async def on_member_remove(self, member):
+        if member.id in self.active_puppets:
+            # Update lookup table
+            self.active_puppets.remove(member.id)
+            del self.mention_lookup[member.display_name + self.listener_config['puppet_suffix']]
+            await self.compile_mention_lookup_re()
+
+            await self.send_irc_command(member, 'die')
+            print(f"{member.display_name} has left!")
 
     async def process_queue(self):
         # Periodically check the queue and send messages
@@ -195,7 +194,7 @@ class DiscordBot(discord.Client):
                 time.sleep(5)
             if not self.active_puppets or message.author.id not in self.active_puppets:
                 await self.activate_puppet(message.author)
-            print('adding message')
+
             content = await self.replace_mentions(message.content)
             data = {
                 'nick': self.irc_safe_nickname(message.author.display_name),

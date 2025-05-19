@@ -112,7 +112,7 @@ def main():
             puppet_main_queues[user['id']].put(user)
             PuppetDict[user['id']].join()
             del PuppetDict[user['id']]
-        if user['command'] == 'send' or user['command'] == 'afk' or user['command'] == 'unafk':
+        if user['command'] == 'send' or user['command'] == 'afk' or user['command'] == 'unafk' or user['command'] == 'nick':
             puppet_main_queues[user['id']].put(user)
     for t in threads:
         t.join()
