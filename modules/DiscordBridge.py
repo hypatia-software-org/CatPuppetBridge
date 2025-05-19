@@ -43,7 +43,8 @@ class DiscordBot(discord.Client):
         for channel in self.ircToDiscordLinks:
             self.discordChannelMapping[channel] = await self.fetch_channel(self.ircToDiscordLinks[channel])
         self.guild = await self.fetch_guild(self.guild_id)
-        asyncio.create_task(self.process_queue())
+        #asyncio.create_task(self.process_queue())
+        self.loop.create_task(self.process_queue())
         self.ready = True
 
     def irc_safe_nickname(self, nickname: str) -> str:
@@ -126,33 +127,34 @@ class DiscordBot(discord.Client):
             logging.info(f"{member.display_name} has left!")
 
     async def process_queue(self):
+        while True:
         # Periodically check the queue and send messages
-        try:
-            msg = self.inQueue.get(timeout=0.5)
-            channel = None
+            try:
+                msg = self.inQueue.get(timeout=0.5)
+                channel = None
 
-            if msg['channel'] in self.discordChannelMapping:
-                channel = self.discordChannelMapping[msg['channel']]
+                if msg['channel'] in self.discordChannelMapping:
+                    channel = self.discordChannelMapping[msg['channel']]
 
-            if channel:
-                webhooks = await channel.webhooks()
-                webhook_name = 'CatPuppetBridge'
-                webhook = None
-                for webhook in webhooks:
-                    if webhook.name == webhook_name:
-                        webhook = webhook
-                        break
-                if webhook == None:
-                    webhook = await channel.create_webhook(name='CatPuppetBridge')
+                if channel:
+                    webhooks = await channel.webhooks()
+                    webhook_name = 'CatPuppetBridge'
+                    webhook = None
+                    for webhook in webhooks:
+                        if webhook.name == webhook_name:
+                            webhook = webhook
+                            break
+                    if webhook == None:
+                        webhook = await channel.create_webhook(name='CatPuppetBridge')
 
-                # detect mentions
-                processed_message = msg['content']
-                if self.mention_lookup_re:
-                    processed_message = self.mention_lookup_re.sub(lambda match: self.mention_lookup[match.group(0)].mention, msg['content'])
-                await webhook.send(processed_message, username=msg['author'], avatar_url='https://robohash.org/' + msg['author'] + '?set=set4')
-        except queue.Empty:
-            pass
-        await asyncio.sleep(0.01)
+                    # detect mentions
+                    processed_message = msg['content']
+                    if self.mention_lookup_re:
+                        processed_message = self.mention_lookup_re.sub(lambda match: self.mention_lookup[match.group(0)].mention, msg['content'])
+                    await webhook.send(processed_message, username=msg['author'], avatar_url='https://robohash.org/' + msg['author'] + '?set=set4')
+            except queue.Empty:
+                pass
+            await asyncio.sleep(0.01)
 
     async def replace_mentions(self, message):
         mention_pattern = r'<@!?(\d+)>'
