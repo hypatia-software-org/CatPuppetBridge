@@ -65,11 +65,14 @@ class IRCPuppet(irc.client.SimpleIRCClient):
         sentinel = object()
         for msg in iter(self.inQueue.get, sentinel):
             #msg = self.inQueue.get()
-            print(msg)
             if msg['command'] == 'send':
-                print("Found send, sending...")
-                if str(msg['channel']) in self.discordToIRCLinks.keys():
-                    self.connection.privmsg(self.discordToIRCLinks[str(msg['channel'])], msg['data'])
+                if msg['data'] == None:
+                    continue
+                #logging.info("Found send, sending from puppet " + self.nickname)
+                messages = self.split_irc_message(msg)
+                for message in messages:
+                    if str(msg['channel']) in self.discordToIRCLinks.keys():
+                        self.connection.privmsg(self.discordToIRCLinks[str(msg['channel'])], message)
             elif msg['command'] == 'afk':
                 self.afk()
             elif msg['command'] == 'unafk':
@@ -81,16 +84,43 @@ class IRCPuppet(irc.client.SimpleIRCClient):
                 self.end_thread = True
                 self.die('has left discord')
             else:
-                print("ERROR: Queue command '" + msg['command'] + "' not found!")
+                logging.error("ERROR: Queue command '" + msg['command'] + "' not found!")
 
     def on_welcome(self, c, e):
         for channel in self.channels:
-            print(f"Puppet Joining {channel}...")
+            logging.info("Puppet Joining " + self.discordToIRCLinks[str(channel)])
             c.join(self.discordToIRCLinks[str(channel)])
         #self.reactor.scheduler.execute_every(1, self.process_discord_queue)
         self.queue_thread = threading.Thread(target=self.process_discord_queue, daemon=True)
         self.queue_thread.start()
         c.mode(c.get_nickname(), "+R")
+
+    def msg_reserved_bytes(self, target):
+        msg = ":<{nick}>!<{user}>@<{host}> PRIVMSG <{target}> :".format(nick=self.nickname, user=self.nickname, host=self.webirc_hostname, target=target)
+        size = len(msg.encode("utf8"))
+        return size + 4 # + CRLF
+
+    def split_irc_message(self, msg):
+        """
+        Splits a message into IRC-safe chunks.
+        """
+        max_bytes = 512 - self.msg_reserved_bytes(msg['channel'])
+        lines = []
+        count = 0
+        message = msg['data']
+
+        while len(message[:max_bytes]) != 0:
+            count = count +1
+            chunk = message[:max_bytes]
+
+            # Don't split in the middle of a word if possible
+            if len(chunk) + 1 < len(message):
+                if not (message[len(chunk)] == ' ' or message[len(chunk)-1] == ' '):
+                    chunk = chunk.rsplit(" ", 1)[0]
+
+            lines.append(chunk)
+            message = message[len(chunk):].lstrip()
+        return lines
 
     #TODO relay to discord listner
     def on_nicknameinuse(self, c, e):
@@ -98,10 +128,10 @@ class IRCPuppet(irc.client.SimpleIRCClient):
         self.nickname = c.get_nickname()
 
     def start(self):
-        print("Starting IRC puppet loop for puppet " + self.nickname)
+        logging.info("Starting IRC puppet loop for puppet " + self.nickname)
         while not self.end_thread:
             self.reactor.process_once(timeout=0.2)
-        print('IRC Puppet killing main thread, ' + self.nickname)
+        logging.info('IRC Puppet killing main thread, ' + self.nickname)
         sys.exit(0)
         #self.reactor.process_forever()
 
