@@ -1,2 +1,2 @@
 lint:
-	pylint .
+	pylint --ignore-paths=.venv .
