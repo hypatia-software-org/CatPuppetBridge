@@ -64,14 +64,14 @@ class DiscordBot(discord.Client):
         display_name = self.irc_safe_nickname(user.display_name)
 
         #still too big? shorten the username too (sheesh)
-        if len(display_name) + len(username) + 5 > self.max_puppet_username:
-            remove_len = (len(display_name) + len(username) + 5) - self.max_puppet_username
+        if len(display_name) + len(username) + 6 > self.max_puppet_username:
+            remove_len = (len(display_name) + len(username) + 6) - self.max_puppet_username
             username = username[:len(username)-remove_len]
 
-        if len(display_name) + len(username) + 5 > self.max_puppet_username:
+        if len(display_name) + len(username) + 6 > self.max_puppet_username:
             # +5, two for [] and 3 for prefix
             # TODO: Make this dynamic
-            remove_len = (len(display_name) + len(username) + 5) - self.max_puppet_username
+            remove_len = (len(display_name) + len(username) + 6) - self.max_puppet_username
             display_name = display_name[:len(display_name)-remove_len]
 
         return "{display_name}[{username}]".format(display_name=display_name, username=username)
