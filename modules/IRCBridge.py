@@ -55,7 +55,6 @@ class IRCPuppet(irc.client.SimpleIRCClient):
 
         self.connection.add_global_handler("welcome", self.on_welcome)
         self.connection.add_global_handler("on_privmsg", self.on_privmsg)
-        self.connection.add_global_handler("on_action", self.on_action)
 
     def on_privmsg(self, c, event):
         nickname = event.source.split('!', 1)[0]
@@ -63,15 +62,6 @@ class IRCPuppet(irc.client.SimpleIRCClient):
             'author': nickname,
             'channel': self.nickname,
             'content': event.arguments[0]
-        }
-        self.out_queue.put(data)
-
-    def on_privmsg(self, c, event):
-        nickname = event.source.split('!', 1)[0]
-        data = {
-            'author': nickname,
-            'channel': self.nickname,
-            'content': '**' + event.arguments[0] + '**'
         }
         self.out_queue.put(data)
 
@@ -202,6 +192,8 @@ class IRCListener(irc.client.SimpleIRCClient):
         self.out_queue = out_queue
         self.connection.add_global_handler("welcome", self.on_welcome)
         self.connection.add_global_handler("pubmsg", self.on_pubmsg)
+        self.connection.add_global_handler("action", self.on_action)
+
         self.config = config
         self.channels = channels
 
@@ -209,6 +201,16 @@ class IRCListener(irc.client.SimpleIRCClient):
         for channel in self.channels:
             logging.info("Listener joining " + channel)
             c.join(channel)
+
+    def on_action(self, c, event):
+        logging.info("Irc action found, adding to queue")
+        nickname = event.source.split('!', 1)[0]
+        data = {
+            'author': nickname,
+            'channel': event.target,
+            'content': '*' + event.arguments[0] + '*'
+        }
+        self.out_queue.put(data)
 
     def on_pubmsg(self, c, event):
         nickname = event.source.split('!', 1)[0]
