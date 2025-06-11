@@ -29,6 +29,10 @@ class DiscordBot(discord.Client):
         intents.members = True
         intents.presences = True
 
+        FORMAT = "%(asctime)s %(levelname)s %(module)s %(message)s"
+        logging.basicConfig(format=FORMAT)
+        logging.basicConfig(level=logging.INFO)
+
         self.inQueue = inQueue
         self.outQueue = outQueue
         self.PuppetQueue = PuppetQueue

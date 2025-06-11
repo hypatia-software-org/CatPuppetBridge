@@ -30,7 +30,11 @@ class IRCPuppet(irc.client.SimpleIRCClient):
         super().__init__()
         ssl_factory = Factory(wrapper=ssl.wrap_socket)
         self.reactor = irc.client.Reactor()
+
         # TODO: ircname
+        FORMAT = "%(asctime)s %(levelname)s %(module)s %(message)s"
+        logging.basicConfig(format=FORMAT)
+        logging.basicConfig(level=logging.INFO)
 
         self.inQueue = inQueue
         self.channels = channels
@@ -165,6 +169,10 @@ class IRCListener(irc.client.SimpleIRCClient):
     channels = None
 
     def __init__(self, channels, nickname, server, port, out_queue, config):
+        FORMAT = "%(asctime)s %(levelname)s %(module)s %(message)s"
+        logging.basicConfig(format=FORMAT)
+        logging.basicConfig(level=logging.INFO)
+
         ssl_factory = Factory(wrapper=ssl.wrap_socket)
         self.reactor = irc.client.Reactor()
         # TODO: ircname
@@ -205,6 +213,9 @@ class IRCListener(irc.client.SimpleIRCClient):
 class IRCBot(irc.bot.SingleServerIRCBot):
 
     def __init__(self, channel, nickname, server, port, tls):
+        FORMAT = "%(asctime)s %(levelname)s %(module)s %(message)s"
+        logging.basicConfig(format=FORMAT)
+        logging.basicConfig(level=logging.INFO)
         if tls == "yes":
             ssl_factory = Factory(wrapper=ssl.wrap_socket)
             irc.bot.SingleServerIRCBot.__init__(self, [(server, port)], nickname, nickname, connect_factory=ssl_factory)
