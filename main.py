@@ -8,7 +8,7 @@ import logging
 from queue import Queue
 
 from modules.IRCBridge import IRCBot, IRCListener, IRCPuppet
-from modules.DiscordBridge import DiscordBot
+from modules.discord_bridge import DiscordBot
 from modules.address_generator import ula_address_from_string
 
 def run_discord(discord_token, queues, irc_to_discord_links, listener_config):
