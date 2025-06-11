@@ -160,14 +160,14 @@ class DiscordBot(discord.Client):
                     webhooks = await channel.webhooks()
                     webhook_name = 'CatPuppetBridge'
                     webhook = None
-                    print("Searching for webhook")
+                    logging.debug("Searching for webhook")
                     for hook in webhooks:
                         if hook.name == webhook_name:
-                            print("Reusing old webhook")
+                            logging.debug("Reusing old webhook")
                             webhook = hook
                             break
                     if webhook == None:
-                        print("Creating new webhook")
+                        logging.debug("Creating new webhook")
                         webhook = await channel.create_webhook(name='CatPuppetBridge')
 
                     # detect mentions
@@ -181,7 +181,7 @@ class DiscordBot(discord.Client):
 
     async def replace_customemotes(self, message):
         new_message = re.sub(r"<:([^:]+):\d+>", r":\1:", message)
-        print(new_message)
+        return new_message
 
     async def replace_channels(self, message):
         mention_pattern = r'<#!?(\d+)>'
@@ -195,8 +195,8 @@ class DiscordBot(discord.Client):
                 channel = self.guild.get_channel(channel_id) or await self.guild.fetch_channel(channel_id)
                 new_message += '#' + channel.name
             except Exception as e:
-                print('failed to find channel '+str(channel_id))
-                print(e)
+                logging.error('failed to find channel '+str(channel_id))
+                logging.error(e)
                 new_message += match.group(0)  # fallback: keep original mention
             last_end = match.end()
 
@@ -217,8 +217,8 @@ class DiscordBot(discord.Client):
                 irc_nick = await self.generate_irc_nickname(user)
                 new_message += irc_nick + self.listener_config['puppet_suffix']
             except Exception as e:
-                print('failed to find user '+str(user_id))
-                print(e)
+                logging.error('failed to find user '+str(user_id))
+                logging.error(e)
                 new_message += match.group(0)  # fallback: keep original mention
             last_end = match.end()
 

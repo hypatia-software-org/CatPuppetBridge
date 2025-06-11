@@ -103,7 +103,7 @@ def main():
         if user['command'] == 'active':
             # Does the puppet already exist? Start it! Otherwise do nothing
             if user['id'] not in PuppetDict.keys():
-                print("Starting IRC Puppet: " + user['irc_nick'])
+                logging.info("Starting IRC Puppet: " + user['irc_nick'])
                 puppet_main_queues[user['id']] = Queue()
                 puppet_nickname = user['irc_nick'] + puppet_suffix
                 ircpuppet_thread = threading.Thread(
