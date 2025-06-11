@@ -99,7 +99,7 @@ class DiscordBot(discord.Client):
         if before.display_name != after.display_name:
             self.active_puppets.remove(before.id)
             self.active_puppets.append(after.id)
-            await compile_mention_lookup_re(after)
+            await self.compile_mention_lookup_re(after)
             await self.send_irc_command(after, 'nick', None)
             logging.info(f"{before.name} changed display name from '{before.display_name}' to '{after.display_name}'")
 

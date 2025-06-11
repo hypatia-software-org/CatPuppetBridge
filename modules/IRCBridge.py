@@ -85,7 +85,7 @@ class IRCPuppet(irc.client.SimpleIRCClient):
             elif msg['command'] == 'unafk':
                 self.unafk()
             elif msg['command'] == 'nick':
-                self.nickname = nickname
+                self.nickname = msg['irc_nick']
                 self.connection.nick(msg['irc_nick'])
             elif msg['command'] == 'join_part':
                 self.join_part(msg['data'])
