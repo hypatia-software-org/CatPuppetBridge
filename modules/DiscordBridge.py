@@ -262,6 +262,8 @@ class DiscordBot(discord.Client):
             if not self.active_puppets or message.author.id not in self.active_puppets:
                 await self.activate_puppet(message.author)
 
+            content = message.content
+
             # Check if this is a reply to a thread
             if message.reference and message.reference.message_id:
                 try:
@@ -274,9 +276,9 @@ class DiscordBot(discord.Client):
                 except discord.NotFound:
                     logging.info(f"Reply not found to message {contnet}".format(content=message.content))
 
-            content = await self.replace_mentions(message.content)
-            content = await self.replace_customemotes(message.content)
-            content = await self.replace_channels(message.content)
+            content = await self.replace_mentions(content)
+            content = await self.replace_customemotes(content)
+            content = await self.replace_channels(content)
 
             data = {
                 'nick': self.irc_safe_nickname(message.author.display_name),
