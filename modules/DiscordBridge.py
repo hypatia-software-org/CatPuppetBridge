@@ -27,6 +27,7 @@ class DiscordBot(discord.Client):
         intents = discord.Intents.default()
         intents.message_content = True
         intents.members = True
+        intents.guilds = True
         intents.presences = True
 
         self.inQueue = inQueue
@@ -36,14 +37,14 @@ class DiscordBot(discord.Client):
         self.guild_id = guild_id
         self.listener_config = listener_config
 
-        super().__init__(intents=intents)
+        super().__init__(intents=intents, chunk_guilds_at_startup=True)
 
     async def on_ready(self):
         logging.info(f'We have logged in as {self.user}')
         self.discordChannelMapping = {}
         for channel in self.ircToDiscordLinks:
-            self.discordChannelMapping[channel] = await self.fetch_channel(self.ircToDiscordLinks[channel])
-        self.guild = await self.fetch_guild(self.guild_id)
+            self.discordChannelMapping[channel] = self.get_channel(self.ircToDiscordLinks[channel]) or await self.fetch_channel(self.ircToDiscordLinks[channel])
+
         #asyncio.create_task(self.process_queue())
         self.loop.create_task(self.process_queue())
         self.ready = True
@@ -183,10 +184,25 @@ class DiscordBot(discord.Client):
                     processed_message = msg['content']
                     if self.mention_lookup_re:
                         processed_message = self.mention_lookup_re.sub(lambda match: self.mention_lookup[match.group(0)].mention, msg['content'])
-                    await webhook.send(processed_message, username=msg['author'], avatar_url='https://robohash.org/' + msg['author'] + '?set=set4')
+                    # Detect Avatar
+                    avatar = await self.find_avatar(msg['author'])
+                    if avatar is None:
+                        avatar = 'https://robohash.org/' + msg['author'] + '?set=set4'
+                    await webhook.send(processed_message, username=msg['author'], avatar_url=avatar)
             except queue.Empty:
                 pass
             await asyncio.sleep(0.01)
+
+    async def find_avatar(self, user):
+        await self.guilds[0].chunk()
+        members = self.guilds[0].members
+        print(members)
+        for member in members:
+            print(member.display_name)
+            if user == member.display_name:
+                if member.avatar:
+                    return member.avatar.url
+        return None
 
     async def replace_customemotes(self, message):
         new_message = re.sub(r"<:([^:]+):\d+>", r":\1:", message)
@@ -201,7 +217,7 @@ class DiscordBot(discord.Client):
             channel_id = int(match.group(1))
             new_message += message[last_end:match.start()]
             try:
-                channel = self.guild.get_channel(channel_id) or await self.guild.fetch_channel(channel_id)
+                channel = self.guilds[0].get_channel(channel_id) or await self.guilds[0].fetch_channel(channel_id)
                 new_message += '#' + channel.name
             except Exception as e:
                 logging.error('failed to find channel '+str(channel_id))
@@ -235,7 +251,7 @@ class DiscordBot(discord.Client):
         return new_message
 
     async def accessible_channels(self, user_id: int):
-        member = self.guild.get_member(user_id) or await self.guild.fetch_member(user_id)
+        member = self.guilds[0].get_member(user_id) or await self.guilds[0].fetch_member(user_id)
 
         if not member:
             return []
@@ -254,14 +270,27 @@ class DiscordBot(discord.Client):
         # Make sure we are ready first
         if not self.ready:
             return
+        # Don't repeat messages
         if message.author.bot and message.webhook_id is not None:
             return
-        if message.content:
-            if self.active_puppets == None:
-                time.sleep(5)
-            if not self.active_puppets or message.author.id not in self.active_puppets:
-                await self.activate_puppet(message.author)
 
+        if not self.active_puppets or message.author.id not in self.active_puppets:
+            await self.activate_puppet(message.author)
+
+        content = None
+        attach = None
+
+        # Check for attachments
+        for attachment in message.attachments:
+            attach = attachment.url
+
+        # Check for embeded images
+        for embed in message.embeds:
+            if embed.url:
+                attach = embed.url
+            elif embed.image.url:
+                attach = embed.image.url
+        if message.content:
             content = message.content
 
             # Check if this is a reply to a thread
@@ -280,6 +309,20 @@ class DiscordBot(discord.Client):
             content = await self.replace_customemotes(content)
             content = await self.replace_channels(content)
 
+        if attach:
+            data = {
+                'nick': self.irc_safe_nickname(message.author.display_name),
+                'display_name': message.author.display_name,
+                'irc_nick': await self.generate_irc_nickname(message.author),
+                'name': message.author.name,
+                'id': message.author.id,
+                'channel': message.channel.id,
+                'command': 'send',
+                'data': attach,
+                'timestamp': time.time()
+            }
+            self.PuppetQueue.put(data)
+        if content:
             data = {
                 'nick': self.irc_safe_nickname(message.author.display_name),
                 'display_name': message.author.display_name,
