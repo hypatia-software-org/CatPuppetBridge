@@ -26,25 +26,26 @@ class IRCPuppet(irc.client.SimpleIRCClient):
     end_thread = False
     ready = False
 
-    def __init__(self, channels, nickname, server, port, inQueue, discordToIRCLinks, webirc_password, webirc_ip, tls):
+    def __init__(self, in_queue, discordToIRCLinks, webirc_ip, puppet_config,
+                 config):
         super().__init__()
         ssl_factory = Factory(wrapper=ssl.wrap_socket)
         self.reactor = irc.client.Reactor()
 
         # TODO: ircname
-        self.inQueue = inQueue
-        self.channels = channels
+        self.inQueue = in_queue
+        self.channels = puppet_config['channels']
         self.discordToIRCLinks = discordToIRCLinks
 
-        self.nickname = nickname
-        self.server = server
-        self.port = port
+        self.nickname = puppet_config['nickname']
+        self.server = config['server']
+        self.port = config['port']
         self.webirc_ip = webirc_ip
         self.webirc_hostname = 'discord.bridge'
-        self.client_name = nickname
-        self.webirc_password = webirc_password
+        self.client_name = puppet_config['nickname']
+        self.webirc_password = config['webirc_password']
         self.end_thread = False
-        if tls == "yes":
+        if config['tls'] == "yes":
             self.connection = self.reactor.server().connect(self.server, self.port, self.nickname,
                                                             connect_factory=ssl_factory)
         else:
@@ -177,7 +178,7 @@ class IRCListener(irc.client.SimpleIRCClient):
     config = None
     channels = None
 
-    def __init__(self, channels, nickname, server, port, out_queue, config):
+    def __init__(self, out_queue, config):
         ssl_factory = Factory(wrapper=ssl.wrap_socket)
         self.reactor = irc.client.Reactor()
         # TODO: ircname
@@ -187,7 +188,7 @@ class IRCListener(irc.client.SimpleIRCClient):
             )
         else:
             self.connection = self.reactor.server().connect(
-                server, port, nickname
+                config['server'], config['port'], config['listener_nickname']
             )
         self.out_queue = out_queue
         self.connection.add_global_handler("welcome", self.on_welcome)
@@ -195,7 +196,7 @@ class IRCListener(irc.client.SimpleIRCClient):
         self.connection.add_global_handler("action", self.on_action)
 
         self.config = config
-        self.channels = channels
+        self.channels = config['channels']
 
     def on_welcome(self, c, e):
         for channel in self.channels:
@@ -229,13 +230,17 @@ class IRCListener(irc.client.SimpleIRCClient):
 
 class IRCBot(irc.bot.SingleServerIRCBot):
 
-    def __init__(self, channel, nickname, server, port, tls):
-        if tls == "yes":
+    def __init__(self, config):
+        if config['tls'] == "yes":
             ssl_factory = Factory(wrapper=ssl.wrap_socket)
-            irc.bot.SingleServerIRCBot.__init__(self, [(server, port)], nickname, nickname, connect_factory=ssl_factory)
+            irc.bot.SingleServerIRCBot.__init__(
+                self, [(config['server'], config['port'])],
+                config['bot_nickname'], config['bot_nickname'], connect_factory=ssl_factory)
         else:
-            irc.bot.SingleServerIRCBot.__init__(self, [(server, port)], nickname, nickname)
-        self.channel = channel
+            irc.bot.SingleServerIRCBot.__init__(
+                self, [(config['server'], config['port'])], config['bot_nickname'],
+                config['bot_nickname'])
+        self.channel = config['bot_channel']
 
     def on_nicknameinuse(self, c, e):
         c.nick(c.get_nickname() + "_")

@@ -22,18 +22,18 @@ class DiscordBot(discord.Client):
     process_queue_thread = None
     max_puppet_username = 30
 
-    def __init__(self, inQueue, outQueue, PuppetQueue, ircToDiscordLinks, listener_config):
+    def __init__(self, queues, irc_to_discord_links, discord_config):
         intents = discord.Intents.default()
         intents.message_content = True
         intents.members = True
         intents.guilds = True
         intents.presences = True
 
-        self.inQueue = inQueue
-        self.outQueue = outQueue
-        self.PuppetQueue = PuppetQueue
-        self.ircToDiscordLinks = ircToDiscordLinks
-        self.listener_config = listener_config
+        self.inQueue = queues['in_queue']
+        self.outQueue = queues['out_queue']
+        self.PuppetQueue = queues['puppet_queue']
+        self.ircToDiscordLinks = irc_to_discord_links
+        self.listener_config = discord_config
 
         super().__init__(intents=intents, chunk_guilds_at_startup=True)
 
