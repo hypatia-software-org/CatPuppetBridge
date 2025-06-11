@@ -7,7 +7,7 @@
 
 ## Developing
 
-### Prerequesits
+### Prerequisites
 
 * A `Discord Server` to invite the bot to
 * Python 3.x
