@@ -13,7 +13,6 @@ class DiscordBot(discord.Client):
     ircToDiscordLinks = None
     discordChannelMapping = None
     PuppetQueue = None
-    guild_id = None
     guild = None
     active_puppets = []
     mention_lookup = {}
@@ -23,7 +22,7 @@ class DiscordBot(discord.Client):
     process_queue_thread = None
     max_puppet_username = 30
 
-    def __init__(self, inQueue, outQueue, PuppetQueue, ircToDiscordLinks, guild_id, listener_config):
+    def __init__(self, inQueue, outQueue, PuppetQueue, ircToDiscordLinks, listener_config):
         intents = discord.Intents.default()
         intents.message_content = True
         intents.members = True
@@ -34,7 +33,6 @@ class DiscordBot(discord.Client):
         self.outQueue = outQueue
         self.PuppetQueue = PuppetQueue
         self.ircToDiscordLinks = ircToDiscordLinks
-        self.guild_id = guild_id
         self.listener_config = listener_config
 
         super().__init__(intents=intents, chunk_guilds_at_startup=True)
@@ -196,9 +194,7 @@ class DiscordBot(discord.Client):
     async def find_avatar(self, user):
         await self.guilds[0].chunk()
         members = self.guilds[0].members
-        print(members)
         for member in members:
-            print(member.display_name)
             if user == member.display_name:
                 if member.avatar:
                     return member.avatar.url

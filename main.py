@@ -9,9 +9,9 @@ from modules.IRCBridge import IRCBot, IRCListener, IRCPuppet
 from modules.DiscordBridge import DiscordBot
 from modules.AddressGenerator import ula_address_from_string
 
-def run_discord(discordToken, in_queue, out_queue, puppet_queue, irc_to_discord_links, guild_id, listener_config):
+def run_discord(discordToken, in_queue, out_queue, puppet_queue, irc_to_discord_links, listener_config):
     # Start Discord Bot
-    discordbot = DiscordBot(in_queue, out_queue, puppet_queue, irc_to_discord_links, guild_id, listener_config)
+    discordbot = DiscordBot(in_queue, out_queue, puppet_queue, irc_to_discord_links, listener_config)
     discordbot.run(discordToken)
 
 def run_ircbot(channel, nickname, server, port, tls):
@@ -68,7 +68,6 @@ def main():
 
     discordConfig = config['Discord']
     discordToken = discordConfig['Token']
-    guild_id = discordConfig['GuildId']
     discord_to_irc_links = {}
     irc_to_discord_links = {}
     channels_to_join = []
@@ -83,7 +82,7 @@ def main():
 
     listener_config = {'puppet_suffix': puppet_suffix, 'tls': tls}
 
-    discordbot_thread = threading.Thread(target=run_discord, args=[discordToken, ircToDiscordQueue, discordToIRCQueue, IrcPuppetQueue, irc_to_discord_links, guild_id, listener_config], daemon=True)
+    discordbot_thread = threading.Thread(target=run_discord, args=[discordToken, ircToDiscordQueue, discordToIRCQueue, IrcPuppetQueue, irc_to_discord_links, listener_config], daemon=True)
     discordbot_thread.start()
 
     ircbot_thread = threading.Thread(target=run_ircbot, args=[channel, bridge_nickname, server, port, tls], daemon=True)
