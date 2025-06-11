@@ -60,17 +60,20 @@ class DiscordBot(discord.Client):
         return valid_nick
 
     async def generate_irc_nickname(self, user):
-        username = user.name
-        display_name = user.display_name
-        if len(display_name) + len(username) + 2 > self.max_puppet_username:
+        username = self.irc_safe_nickname(user.name)
+        display_name = self.irc_safe_nickname(user.display_name)
+
+        #still too big? shorten the username too (sheesh)
+        if len(display_name) + len(username) + 5 > self.max_puppet_username:
+            remove_len = (len(display_name) + len(username) + 5) - self.max_puppet_username
+            username = username[:len(username)-remove_len]
+
+        if len(display_name) + len(username) + 5 > self.max_puppet_username:
             # +5, two for [] and 3 for prefix
             # TODO: Make this dynamic
             remove_len = (len(display_name) + len(username) + 5) - self.max_puppet_username
             display_name = display_name[:len(display_name)-remove_len]
-        #still too big? shorten the username too (sheesh)
-        if len(display_name) + len(username) + 2 > self.max_puppet_username:
-            remove_len = (len(display_name) + len(username) + 5) - self.max_puppet_username
-            username = username[:len(username)-remove_len]
+
         return "{display_name}[{username}]".format(display_name=display_name, username=username)
             
     async def activate_puppet(self, user):
@@ -90,7 +93,7 @@ class DiscordBot(discord.Client):
             self.mention_lookup[irc_name + self.listener_config['puppet_suffix']] = user
         self.mention_lookup_re = re.compile(r'\b(' + '|'.join(map(re.escape, self.mention_lookup.keys())) + r')\b')
 
-    async def on_member_update(before: discord.Member, after: discord.Member):
+    async def on_member_update(self, before: discord.Member, after: discord.Member):
         if before.display_name != after.display_name:
             self.active_puppets.remove(before.id)
             self.active_puppets.append(after.id)
@@ -157,11 +160,14 @@ class DiscordBot(discord.Client):
                     webhooks = await channel.webhooks()
                     webhook_name = 'CatPuppetBridge'
                     webhook = None
-                    for webhook in webhooks:
-                        if webhook.name == webhook_name:
-                            webhook = webhook
+                    print("Searching for webhook")
+                    for hook in webhooks:
+                        if hook.name == webhook_name:
+                            print("Reusing old webhook")
+                            webhook = hook
                             break
                     if webhook == None:
+                        print("Creating new webhook")
                         webhook = await channel.create_webhook(name='CatPuppetBridge')
 
                     # detect mentions
@@ -173,6 +179,31 @@ class DiscordBot(discord.Client):
                 pass
             await asyncio.sleep(0.01)
 
+    async def replace_customemotes(self, message):
+        new_message = re.sub(r"<:([^:]+):\d+>", r":\1:", message)
+        print(new_message)
+
+    async def replace_channels(self, message):
+        mention_pattern = r'<#!?(\d+)>'
+        new_message = ""
+        last_end = 0
+
+        for match in re.finditer(mention_pattern, message):
+            channel_id = int(match.group(1))
+            new_message += message[last_end:match.start()]
+            try:
+                channel = self.guild.get_channel(channel_id) or await self.guild.fetch_channel(channel_id)
+                new_message += '#' + channel.name
+            except Exception as e:
+                print('failed to find channel '+str(channel_id))
+                print(e)
+                new_message += match.group(0)  # fallback: keep original mention
+            last_end = match.end()
+
+        new_message += message[last_end:]  # append rest of string
+        return new_message
+
+
     async def replace_mentions(self, message):
         mention_pattern = r'<@!?(\d+)>'
         new_message = ""
@@ -182,9 +213,12 @@ class DiscordBot(discord.Client):
             user_id = int(match.group(1))
             new_message += message[last_end:match.start()]
             try:
-                user = await self.fetch_user(user_id)
-                new_message += self.irc_safe_nickname(user.irc_nick) + self.listener_config['puppet_suffix']
-            except Exception:
+                user = self.get_user(user_id) or await self.fetch_user(user_id)
+                irc_nick = await self.generate_irc_nickname(user)
+                new_message += irc_nick + self.listener_config['puppet_suffix']
+            except Exception as e:
+                print('failed to find user '+str(user_id))
+                print(e)
                 new_message += match.group(0)  # fallback: keep original mention
             last_end = match.end()
 
@@ -219,7 +253,22 @@ class DiscordBot(discord.Client):
             if not self.active_puppets or message.author.id not in self.active_puppets:
                 await self.activate_puppet(message.author)
 
+            # Check if this is a reply to a thread
+            if message.reference and message.reference.message_id:
+                try:
+                    replied_to = await message.channel.fetch_message(message.reference.message_id)
+                    reply_author = await self.generate_irc_nickname(replied_to.author)
+                    template = 'replied to {author} "{message}...": {content}'
+                    content = template.format(author=reply_author,
+                                     message=replied_to.content[:20],
+                                     content=content)
+                except discord.NotFound:
+                    logging.info(f"Reply not found to message {contnet}".format(content=message.content))
+
             content = await self.replace_mentions(message.content)
+            content = await self.replace_customemotes(message.content)
+            content = await self.replace_channels(message.content)
+
             data = {
                 'nick': self.irc_safe_nickname(message.author.display_name),
                 'display_name': message.author.display_name,

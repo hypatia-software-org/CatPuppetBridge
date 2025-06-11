@@ -1,12 +1,19 @@
+[Links]
+# discord_channel_id = #ircchannel
+
 [IRC]
 Server = 
-Channel = #bots
+BotChannel = #bots
 TLS = yes
 Port = 6697
 BridgeNickname = DiscordBridge
+ListenerNickname = _d2
+PuppetSuffix = _d2
+WebIRCPassword = 
 
 [Discord]
-ClientID = 
+ClientID =
+GuildID =
 PublicKey = 
 ClientSecret = 
 Token = 

@@ -9,6 +9,7 @@ import sys
 import threading
 import logging
 import time
+import re
 
 
 class IRCPuppet(irc.client.SimpleIRCClient):
@@ -25,7 +26,7 @@ class IRCPuppet(irc.client.SimpleIRCClient):
     end_thread = False
     ready = False
 
-    def __init__(self, channels, nickname, server, port, inQueue, discordToIRCLinks, webirc_password, webirc_ip):
+    def __init__(self, channels, nickname, server, port, inQueue, discordToIRCLinks, webirc_password, webirc_ip, tls):
         super().__init__()
         ssl_factory = Factory(wrapper=ssl.wrap_socket)
         self.reactor = irc.client.Reactor()
@@ -43,10 +44,11 @@ class IRCPuppet(irc.client.SimpleIRCClient):
         self.client_name = nickname
         self.webirc_password = webirc_password
         self.end_thread = False
-
-        ssl_factory = Factory(wrapper=ssl.wrap_socket)
-        self.connection = self.reactor.server().connect(self.server, self.port, self.nickname,
-                                                        connect_factory=ssl_factory)
+        if tls == "yes":
+            self.connection = self.reactor.server().connect(self.server, self.port, self.nickname,
+                                                            connect_factory=ssl_factory)
+        else:
+            self.connection = self.reactor.server().connect(self.server, self.port, self.nickname)
         self.connection.send_raw(
                 f"WEBIRC {self.webirc_password} {self.webirc_hostname} {self.webirc_hostname} {self.webirc_ip}"
             )
@@ -114,7 +116,8 @@ class IRCPuppet(irc.client.SimpleIRCClient):
         lines = []
         count = 0
         message = msg['data']
-
+        #TODO: split into multiple messages maybe?
+        message = re.sub(r'[\r\n]+', '', message)
         while len(message[:max_bytes]) != 0:
             count = count +1
             chunk = message[:max_bytes]
@@ -159,23 +162,30 @@ class IRCPuppet(irc.client.SimpleIRCClient):
 class IRCListener(irc.client.SimpleIRCClient):
     out_queue = None
     config = None
+    channels = None
 
-    def __init__(self, channel, nickname, server, port, out_queue, config):
+    def __init__(self, channels, nickname, server, port, out_queue, config):
         ssl_factory = Factory(wrapper=ssl.wrap_socket)
         self.reactor = irc.client.Reactor()
         # TODO: ircname
-        self.connection = self.reactor.server().connect(
-            server, port, nickname, connect_factory=ssl_factory
-        )
+        if config['tls'] == "yes":
+            self.connection = self.reactor.server().connect(
+                server, port, nickname, connect_factory=ssl_factory
+            )
+        else:
+            self.connection = self.reactor.server().connect(
+                server, port, nickname
+            )
         self.out_queue = out_queue
-        self.channel = channel
         self.connection.add_global_handler("welcome", self.on_welcome)
         self.connection.add_global_handler("pubmsg", self.on_pubmsg)
         self.config = config
+        self.channels = channels
 
     def on_welcome(self, c, e):
-        logging.info(f"Listener Connected! Joining {self.channel}...")
-        c.join(self.channel)
+        for channel in self.channels:
+            logging.info("Listener joining " + channel)
+            c.join(channel)
 
     def on_pubmsg(self, c, event):
         nickname = event.source.split('!', 1)[0]
@@ -194,16 +204,18 @@ class IRCListener(irc.client.SimpleIRCClient):
 
 class IRCBot(irc.bot.SingleServerIRCBot):
 
-    def __init__(self, channel, nickname, server, port):
-        ssl_factory = Factory(wrapper=ssl.wrap_socket)
-        irc.bot.SingleServerIRCBot.__init__(self, [(server, port)], nickname, nickname, connect_factory=ssl_factory)
+    def __init__(self, channel, nickname, server, port, tls):
+        if tls == "yes":
+            ssl_factory = Factory(wrapper=ssl.wrap_socket)
+            irc.bot.SingleServerIRCBot.__init__(self, [(server, port)], nickname, nickname, connect_factory=ssl_factory)
+        else:
+            irc.bot.SingleServerIRCBot.__init__(self, [(server, port)], nickname, nickname)
         self.channel = channel
 
     def on_nicknameinuse(self, c, e):
         c.nick(c.get_nickname() + "_")
 
     def on_welcome(self, c, e):
-        logging.info(f"Bot Connected! Joining {self.channel}...")
         c.join(self.channel)
 
     def on_privmsg(self, c, e):
