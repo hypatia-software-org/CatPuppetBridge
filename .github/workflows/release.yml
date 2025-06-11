@@ -1,30 +1,21 @@
-name: Release
+name: Create Release
 
 on:
   push:
     tags:
-      - 'v*'  # Triggers on any tag starting with v
+      - 'v*'
 
 jobs:
-  build-release:
-    name: Build Release Archives
+  release:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Check out code
+      - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Create tarball and zip
-        run: |
-          mkdir -p dist
-          git archive --format=tar.gz --output=dist/${{ github.event.repository.name }}-${{ github.ref_name }}.tar.gz ${{ github.ref_name }}
-          git archive --format=zip --output=dist/${{ github.event.repository.name }}-${{ github.ref_name }}.zip ${{ github.ref_name }}
-
-      - name: Upload release assets
+      - name: Create GitHub Release
         uses: softprops/action-gh-release@v1
         with:
-          files: |
-            dist/*.tar.gz
-            dist/*.zip
+          generate_release_notes: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
