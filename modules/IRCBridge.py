@@ -32,10 +32,6 @@ class IRCPuppet(irc.client.SimpleIRCClient):
         self.reactor = irc.client.Reactor()
 
         # TODO: ircname
-        FORMAT = "%(asctime)s %(levelname)s %(module)s %(message)s"
-        logging.basicConfig(format=FORMAT)
-        logging.basicConfig(level=logging.INFO)
-
         self.inQueue = inQueue
         self.channels = channels
         self.discordToIRCLinks = discordToIRCLinks
@@ -91,11 +87,24 @@ class IRCPuppet(irc.client.SimpleIRCClient):
             elif msg['command'] == 'nick':
                 self.nickname = nickname
                 self.connection.nick(msg['irc_nick'])
+            elif msg['command'] == 'join_part':
+                self.join_part(msg['data'])
             elif msg['command'] == 'die':
                 self.end_thread = True
                 self.die('has left discord')
             else:
                 logging.error("ERROR: Queue command '" + msg['command'] + "' not found!")
+
+    def join_part(self, channels):
+        for channel in channels:
+            if channel not in self.channels:
+                logging.info("Puppet Joining {}".format(self.discordToIRCLinks[str(channel)]))
+                self.connection.join(self.discordToIRCLinks[str(channel)])
+        for channel in self.channels:
+            if channel not in channels:
+                logging.info("Puppet Parting {}".format(self.discordToIRCLinks[str(channel)]))
+                self.connection.part(self.discordToIRCLinks[str(channel)])
+        self.channels = channels
 
     def on_welcome(self, c, e):
         for channel in self.channels:
@@ -169,10 +178,6 @@ class IRCListener(irc.client.SimpleIRCClient):
     channels = None
 
     def __init__(self, channels, nickname, server, port, out_queue, config):
-        FORMAT = "%(asctime)s %(levelname)s %(module)s %(message)s"
-        logging.basicConfig(format=FORMAT)
-        logging.basicConfig(level=logging.INFO)
-
         ssl_factory = Factory(wrapper=ssl.wrap_socket)
         self.reactor = irc.client.Reactor()
         # TODO: ircname
@@ -213,9 +218,6 @@ class IRCListener(irc.client.SimpleIRCClient):
 class IRCBot(irc.bot.SingleServerIRCBot):
 
     def __init__(self, channel, nickname, server, port, tls):
-        FORMAT = "%(asctime)s %(levelname)s %(module)s %(message)s"
-        logging.basicConfig(format=FORMAT)
-        logging.basicConfig(level=logging.INFO)
         if tls == "yes":
             ssl_factory = Factory(wrapper=ssl.wrap_socket)
             irc.bot.SingleServerIRCBot.__init__(self, [(server, port)], nickname, nickname, connect_factory=ssl_factory)

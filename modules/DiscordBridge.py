@@ -29,10 +29,6 @@ class DiscordBot(discord.Client):
         intents.members = True
         intents.presences = True
 
-        FORMAT = "%(asctime)s %(levelname)s %(module)s %(message)s"
-        logging.basicConfig(format=FORMAT)
-        logging.basicConfig(level=logging.INFO)
-
         self.inQueue = inQueue
         self.outQueue = outQueue
         self.PuppetQueue = PuppetQueue
@@ -98,12 +94,21 @@ class DiscordBot(discord.Client):
         self.mention_lookup_re = re.compile(r'\b(' + '|'.join(map(re.escape, self.mention_lookup.keys())) + r')\b')
 
     async def on_member_update(self, before: discord.Member, after: discord.Member):
+
+        # Check for displayname Change
         if before.display_name != after.display_name:
             self.active_puppets.remove(before.id)
             self.active_puppets.append(after.id)
             await compile_mention_lookup_re(after)
             await self.send_irc_command(after, 'nick', None)
             logging.info(f"{before.name} changed display name from '{before.display_name}' to '{after.display_name}'")
+
+        # Check for role change:
+        before_roles = set(before.roles)
+        after_roles = set(after.roles)
+        if before_roles != after_roles:
+            channels =  await self.accessible_channels(after.id)
+            await self.send_irc_command(after, 'join_part', channels)
 
     async def on_presence_update(self, before, after):
         # Make sure we are ready:

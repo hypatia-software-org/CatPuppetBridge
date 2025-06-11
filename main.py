@@ -31,8 +31,7 @@ def run_ircpuppet(channels, nickname, server, port, in_queue, discord_to_irc_lin
 
 def main():
     FORMAT = "%(asctime)s %(levelname)s %(module)s %(message)s"
-    logging.basicConfig(format=FORMAT)
-    logging.basicConfig(level=logging.INFO)
+    logging.basicConfig(format=FORMAT, level=logging.INFO)
 
     config_filename = 'catbridge.ini'
     if os.path.isfile(config_filename):
@@ -120,7 +119,8 @@ def main():
             puppet_main_queues[user['id']].put(user)
             PuppetDict[user['id']].join()
             del PuppetDict[user['id']]
-        if user['command'] == 'send' or user['command'] == 'afk' or user['command'] == 'unafk' or user['command'] == 'nick':
+        if user['command'] == 'send' or user['command'] == 'afk' or user['command'] == 'unafk' \
+           or user['command'] == 'nick' or user['command'] == 'join_part':
             puppet_main_queues[user['id']].put(user)
     for t in threads:
         t.join()
