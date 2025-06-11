@@ -318,7 +318,7 @@ class DiscordBot(discord.Client):
                 'timestamp': time.time()
             }
             self.PuppetQueue.put(data)
-        if content:
+        if content and content != attach:
             data = {
                 'nick': self.irc_safe_nickname(message.author.display_name),
                 'display_name': message.author.display_name,
