@@ -1,3 +1,5 @@
+"""Generate ULA IPv6 addresses for WebIRC"""
+
 import ipaddress
 import hashlib
 
