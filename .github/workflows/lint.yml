@@ -22,4 +22,5 @@ jobs:
             python:3.11-slim \
             bash -c "apt-get update \
               && apt-get install -y make \
+              && pip install -r requirements/prod.txt \
               && pip install pylint && make lint"
