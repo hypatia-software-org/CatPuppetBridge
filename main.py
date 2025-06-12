@@ -7,7 +7,7 @@ import threading
 import logging
 from queue import Queue
 
-from modules.IRCBridge import IRCBot, IRCListener, IRCPuppet
+from modules.irc_bridge import IRCBot, IRCListener, IRCPuppet
 from modules.discord_bridge import DiscordBot
 from modules.address_generator import ula_address_from_string
 
@@ -29,12 +29,10 @@ def run_irclistener(out_queue, config):
     ircbot = IRCListener(out_queue, config)
     ircbot.start()
 
-def run_ircpuppet(in_queue, discord_to_irc_links, webirc_ip, puppet_config,
-                  config):
+def run_ircpuppet(queues, discord_to_irc_links, puppet_config, config):
     """Start a IRC Puppet thread"""
     # Start IRC Puppet
-    ircbot = IRCPuppet(in_queue, discord_to_irc_links,
-                       webirc_ip, puppet_config, config)
+    ircbot = IRCPuppet(queues, discord_to_irc_links, puppet_config, config)
     ircbot.start()
 
 def init_config(config_filename='catbridge.ini'):
@@ -136,9 +134,9 @@ def main():
     }
 
     discord_queues = {
-        'in_queue': Queue(),
-        'out_queue': Queue(),
-        'puppet_queue': Queue()
+        'irc_to_discord_queue': Queue(),
+        'puppet_queue': Queue(),
+        'dm_out_queue': Queue()
     }
 
     threads = []
@@ -167,14 +165,18 @@ def main():
                 logging.info("Starting IRC Puppet: %s", user['irc_nick'])
                 puppet_main_queues[user['id']] = Queue()
                 puppet_nickname = user['irc_nick'] + configs['irc_config']['PuppetSuffix']
+                print(user)
                 puppet_config = {
                     'channels': user['data'],
-                    'nickname': puppet_nickname
+                    'nickname': puppet_nickname,
+                    'webirc_ip': ula_address_from_string(puppet_nickname)
                     }
                 ircpuppet_thread = threading.Thread(
                     target=run_ircpuppet,
-                    args=[puppet_main_queues[user['id']], configs['discord_to_irc_links'],
-                          ula_address_from_string(puppet_nickname),
+                    args=[{
+                        'in_queue': puppet_main_queues[user['id']],
+                        'out_queue': discord_queues['dm_out_queue']
+                        }, configs['discord_to_irc_links'],
                           puppet_config, irc_config],
                     daemon=True)
                 ircpuppet_thread.start()

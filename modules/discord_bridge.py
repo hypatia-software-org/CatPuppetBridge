@@ -171,7 +171,7 @@ class DiscordBot(discord.Client):
         while True:
         # Periodically check the queue and send messages
             try:
-                msg = self.queues['in_queue'].get(timeout=0.5)
+                msg = self.queues['irc_to_discord_queue'].get(timeout=0.5)
                 channel = None
 
                 if msg['channel'] in self.discord_channel_mapping:
@@ -276,10 +276,10 @@ class DiscordBot(discord.Client):
         accessible = []
 
         for channel in self.discord_channel_mapping.items():
-            if isinstance(channel, discord.abc.GuildChannel):
-                perms = channel.permissions_for(member)
+            if isinstance(channel[1], discord.abc.GuildChannel):
+                perms = channel[1].permissions_for(member)
                 if perms.view_channel:
-                    accessible.append(channel.id)
+                    accessible.append(channel[1].id)
 
         return accessible
 
