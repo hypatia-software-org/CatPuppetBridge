@@ -77,7 +77,7 @@ class DiscordBot(discord.Client):
                 - self.max_puppet_username
             display_name = display_name[:len(display_name)-remove_len]
 
-        return "{display_name}[{username}]".format(display_name=display_name, username=username)
+        return f"{display_name}[{username}]".format(display_name=display_name, username=username)
 
     async def activate_puppet(self, user):
         """Push to the puppet queue to activate an irc puppet"""
@@ -138,11 +138,11 @@ class DiscordBot(discord.Client):
         if previously_active and now_inactive:
             if after.id in self.active_puppets:
                 await self.send_irc_command(after, 'afk')
-                logging.info(f"{after.display_name} is now offline! (status: {after.status})")
+                logging.info("%s is now offline! (status: %s)", after.display_name, after.status)
 
     async def send_irc_command(self, user, command, data=None, channel=None):
         """Send a command to an IRC Puppet"""
-        logging.info('adding cmd to queue from discord: ' + command)
+        logging.info('adding cmd to queue from discord: %s',command)
         self.queues['puppet_queue'].put({
             'nick': self.irc_safe_nickname(user.display_name),
             'display_name': user.display_name,
@@ -164,7 +164,7 @@ class DiscordBot(discord.Client):
             await self.compile_mention_lookup_re()
 
             await self.send_irc_command(member, 'die')
-            logging.info(f"{member.display_name} has left!")
+            logging.info("%s has left!", member.display_name)
 
     async def process_queue(self):
         """Thread to process our incoming queue from IRC"""
@@ -234,8 +234,8 @@ class DiscordBot(discord.Client):
                 channel = self.guilds[0].get_channel(channel_id) or \
                     await self.guilds[0].fetch_channel(channel_id)
                 new_message += '#' + channel.name
-            except Exception as e:
-                logging.error('failed to find channel '+str(channel_id))
+            except discord.NotFound as e:
+                logging.error('failed to find channel %i', channel_id)
                 logging.error(e)
                 new_message += match.group(0)  # fallback: keep original mention
             last_end = match.end()
@@ -257,8 +257,8 @@ class DiscordBot(discord.Client):
                 user = self.get_user(user_id) or await self.fetch_user(user_id)
                 irc_nick = await self.generate_irc_nickname(user)
                 new_message += irc_nick + self.listener_config['puppet_suffix']
-            except Exception as e:
-                logging.error('failed to find user '+str(user_id))
+            except discord.NotFound as e:
+                logging.error('failed to find user %i', user_id)
                 logging.error(e)
                 new_message += match.group(0)  # fallback: keep original mention
             last_end = match.end()
@@ -275,11 +275,11 @@ class DiscordBot(discord.Client):
 
         accessible = []
 
-        for channel in self.discord_channel_mapping:
-            if isinstance(self.discord_channel_mapping[channel], discord.abc.GuildChannel):
-                perms = self.discord_channel_mapping[channel].permissions_for(member)
+        for channel in self.discord_channel_mapping.items():
+            if isinstance(channel, discord.abc.GuildChannel):
+                perms = channel.permissions_for(member)
                 if perms.view_channel:
-                    accessible.append(self.discord_channel_mapping[channel].id)
+                    accessible.append(channel.id)
 
         return accessible
 
@@ -321,8 +321,7 @@ class DiscordBot(discord.Client):
                                      message=replied_to.content[:20],
                                      content=content)
                 except discord.NotFound:
-                    logging.info(
-                        f"Reply not found to message {content}".format(content=message.content))
+                    logging.info("Reply not found to message %s", message.content)
 
             content = await self.replace_mentions(content)
             content = await self.replace_customemotes(content)
