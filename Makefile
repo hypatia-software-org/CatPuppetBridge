@@ -1,2 +1,2 @@
 lint:
-	pylint .
+	pylint --rcfile=.pylintrc main.py modules
