@@ -14,15 +14,12 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Install make on runner
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y make
-
       - name: Run make lint using pylint Docker image
         run: |
           docker run --rm \
             -v ${{ github.workspace }}:/app \
             -w /app \
             python:3.11-slim \
-            bash -c "pip install pylint && make lint"
+            bash -c "apt-get update \
+              && apt-get install -y make \
+              && pip install pylint && make lint"
