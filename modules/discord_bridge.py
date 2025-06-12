@@ -316,10 +316,16 @@ class DiscordBot(discord.Client):
                 try:
                     replied_to = await message.channel.fetch_message(message.reference.message_id)
                     reply_author = await self.generate_irc_nickname(replied_to.author)
+
+                    replied_to_content = replied_to.content[:50]
+                    replied_to_content = await self.replace_mentions(replied_to_content)
+                    replied_to_content = await self.replace_customemotes(replied_to_content)
+                    replied_to_content = await self.replace_channels(replied_to_content)
+
                     template = 'replied to {author} "{message}...": {content}'
                     content = template.format(author=reply_author,
-                                     message=replied_to.content[:20],
-                                     content=content)
+                                              message=replied_to_content,
+                                              content=content)
                 except discord.NotFound:
                     logging.info("Reply not found to message %s", message.content)
 
@@ -340,7 +346,7 @@ class DiscordBot(discord.Client):
                 'timestamp': time.time()
             }
             self.queues['puppet_queue'].put(data)
-        if content:
+        if content and content != attach:
             data = {
                 'nick': self.irc_safe_nickname(message.author.display_name),
                 'display_name': message.author.display_name,
