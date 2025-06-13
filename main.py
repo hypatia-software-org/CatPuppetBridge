@@ -165,7 +165,6 @@ def main():
                 logging.info("Starting IRC Puppet: %s", user['irc_nick'])
                 puppet_main_queues[user['id']] = Queue()
                 puppet_nickname = user['irc_nick'] + configs['irc_config']['PuppetSuffix']
-                print(user)
                 puppet_config = {
                     'channels': user['data'],
                     'nickname': puppet_nickname,

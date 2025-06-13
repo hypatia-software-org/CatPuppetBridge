@@ -283,18 +283,8 @@ class DiscordBot(discord.Client):
 
         return accessible
 
-    async def on_message(self, message):
-        """Run when messages are read from discord"""
-        # Make sure we are ready first
-        if not self.ready:
-            return
-        # Don't repeat messages
-        if message.author.bot and message.webhook_id is not None:
-            return
-
-        if not self.active_puppets or message.author.id not in self.active_puppets:
-            await self.activate_puppet(message.author)
-
+    async def parse_message_content(self, message):
+        """Parse message content and attachments"""
         content = None
         attach = None
 
@@ -333,29 +323,36 @@ class DiscordBot(discord.Client):
             content = await self.replace_customemotes(content)
             content = await self.replace_channels(content)
 
+        return content, attach
+
+    async def on_message_edit(self, before, after):
+        """Run when messages are edited on discord"""
+        content = None
+        attach = None
+        if before.content != after.content:
+            content, attach = await self.parse_message_content(after)
+
         if attach:
-            data = {
-                'nick': self.irc_safe_nickname(message.author.display_name),
-                'display_name': message.author.display_name,
-                'irc_nick': await self.generate_irc_nickname(message.author),
-                'name': message.author.name,
-                'id': message.author.id,
-                'channel': message.channel.id,
-                'command': 'send',
-                'data': attach,
-                'timestamp': time.time()
-            }
-            self.queues['puppet_queue'].put(data)
+            await self.send_irc_command(before.author, 'send', attach, before.channel.id)
         if content and content != attach:
-            data = {
-                'nick': self.irc_safe_nickname(message.author.display_name),
-                'display_name': message.author.display_name,
-                'irc_nick': await self.generate_irc_nickname(message.author),
-                'name': message.author.name,
-                'id': message.author.id, 
-                'channel': message.channel.id,
-                'command': 'send',
-                'data': content,
-                'timestamp': time.time()
-            }
-            self.queues['puppet_queue'].put(data)
+            content = '[edit] ' + content
+            await self.send_irc_command(before.author, 'send', content, before.channel.id)
+
+    async def on_message(self, message):
+        """Run when messages are read from discord"""
+        # Make sure we are ready first
+        if not self.ready:
+            return
+        # Don't repeat messages
+        if message.author.bot and message.webhook_id is not None:
+            return
+
+        if not self.active_puppets or message.author.id not in self.active_puppets:
+            await self.activate_puppet(message.author)
+
+        content, attach = await self.parse_message_content(message)
+
+        if attach:
+            await self.send_irc_command(message.author, 'send', attach, message.channel.id)
+        if content and content != attach:
+            await self.send_irc_command(message.author, 'send', content, message.channel.id)
