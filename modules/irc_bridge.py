@@ -53,11 +53,12 @@ class IRCPuppet(irc.client.SimpleIRCClient):
             )
 
         self.connection.add_global_handler("welcome", self.on_welcome)
-        self.connection.add_global_handler("on_privmsg", self.on_privmsg)
+        self.connection.add_global_handler("privmsg", self.on_privmsg)
 
     def on_privmsg(self, c, event):
         """Process DMs and pass to discord user"""
         logging.debug("conext %s", c)
+        logging.info("DM found, adding to queue")
         nickname = event.source.split('!', 1)[0]
         data = {
             'author': nickname,

@@ -45,6 +45,7 @@ class DiscordBot(discord.Client):
 
         #asyncio.create_task(self.process_queue())
         self.loop.create_task(self.process_queue())
+        self.loop.create_task(self.process_dm_queue())
         self.ready = True
 
     def irc_safe_nickname(self, nickname: str) -> str:
@@ -206,6 +207,32 @@ class DiscordBot(discord.Client):
                 pass
             await asyncio.sleep(0.01)
 
+    async def process_dm_queue(self):
+        """Thread to process our incoming dm_queue from IRC private messages"""
+        while True:
+        # Periodically check the queue and send messages
+            try:
+                msg = self.queues['dm_out_queue'].get(timeout=0.5)
+                target = None
+
+                if self.mention_lookup_re:
+                    target = self.mention_lookup_re.sub(
+                        lambda match: self.mention_lookup[match.group(0)].mention,
+                        msg['channel'])
+                    user_id = re.match(r"<@!?(\d+)>", target)
+                    user = await self.fetch_user(user_id.group(1))
+                if user:
+                    # detect mentions
+                    processed_message = msg['content']
+                    if self.mention_lookup_re:
+                        processed_message = self.mention_lookup_re.sub(
+                            lambda match: self.mention_lookup[match.group(0)].mention,
+                            msg['content'])
+                    await user.send(msg['content'])
+            except queue.Empty:
+                pass
+            await asyncio.sleep(0.01)
+
     async def find_avatar(self, user):
         """Find an avatar if user exists on irc and discord"""
         await self.guilds[0].chunk()
@@ -339,6 +366,23 @@ class DiscordBot(discord.Client):
             await self.send_irc_command(before.author, 'send', content, before.channel.id)
 
     async def on_message(self, message):
+        if isinstance(message.channel, discord.DMChannel):
+            logging.info("Discord bot received a DM, processing")
+            dm_user = await self.fetch_user(message.author.id)
+            reply = ''
+            if message.content == 'help':
+                reply = '''This is the CatPuppetBridge bot, that links Discord to IRC. Here is a list of commands:
+* `dm USERNAME MESSAGE` - Send a Direct Message to a user on IRC. For example: `dm coolusername Whats up?` would DM `coolusername` on IRC the message `Whats up?`
+* `session USERNAME` - Open a session with a user on IRC. All messages typed to this bot will be sent to the user until the session is ended
+* `sessionend` - End a session with an IRC user
+'''
+            else:
+                reply = 'Command not found, try using the command `help` for more information.'
+            try:
+                await dm_user.send(reply)
+            except discord.errors.HTTPException as e:
+                logging.error(e)
+            return
         """Run when messages are read from discord"""
         # Make sure we are ready first
         if not self.ready:
