@@ -214,6 +214,7 @@ class DiscordBot(discord.Client):
             try:
                 msg = self.queues['dm_out_queue'].get(timeout=0.5)
                 target = None
+                user = None
 
                 if self.mention_lookup_re:
                     target = self.mention_lookup_re.sub(
@@ -228,7 +229,7 @@ class DiscordBot(discord.Client):
                         processed_message = self.mention_lookup_re.sub(
                             lambda match: self.mention_lookup[match.group(0)].mention,
                             msg['content'])
-                    await user.send(msg['content'])
+                    await user.send(processed_message)
             except queue.Empty:
                 pass
             await asyncio.sleep(0.01)
@@ -366,11 +367,13 @@ class DiscordBot(discord.Client):
             await self.send_irc_command(before.author, 'send', content, before.channel.id)
 
     async def on_message(self, message):
+        """Run when messages are read from discord"""        
         if isinstance(message.channel, discord.DMChannel):
             logging.info("Discord bot received a DM, processing")
             dm_user = await self.fetch_user(message.author.id)
             reply = ''
             if message.content == 'help':
+                # pylint: disable=line-too-long
                 reply = '''This is the CatPuppetBridge bot, that links Discord to IRC. Here is a list of commands:
 * `dm USERNAME MESSAGE` - Send a Direct Message to a user on IRC. For example: `dm coolusername Whats up?` would DM `coolusername` on IRC the message `Whats up?`
 * `session USERNAME` - Open a session with a user on IRC. All messages typed to this bot will be sent to the user until the session is ended
@@ -383,7 +386,7 @@ class DiscordBot(discord.Client):
             except discord.errors.HTTPException as e:
                 logging.error(e)
             return
-        """Run when messages are read from discord"""
+
         # Make sure we are ready first
         if not self.ready:
             return
