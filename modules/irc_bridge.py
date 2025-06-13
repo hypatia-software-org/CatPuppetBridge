@@ -197,7 +197,7 @@ class IRCListener(irc.client.SimpleIRCClient):
         # TODO: ircname
         if config['tls'] == "yes":
             self.connection = self.reactor.server().connect(
-                config['server'], config['port'], config['nickname'], connect_factory=ssl_factory
+                config['server'], config['port'], config['listener_nickname'], connect_factory=ssl_factory
             )
         else:
             self.connection = self.reactor.server().connect(
