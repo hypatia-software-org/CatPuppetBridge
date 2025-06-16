@@ -82,6 +82,14 @@ class IRCPuppet(irc.client.SimpleIRCClient):
                     if str(msg['channel']) in self.discord_to_irc_links.keys():
                         self.connection.privmsg(
                             self.discord_to_irc_links[str(msg['channel'])], message)
+            elif msg['command'] == 'send_dm':
+                if msg['data'] is None:
+                    continue
+                logging.info("Found send, sending DM from puppet %s", self.config['nickname'])
+                messages = self.split_irc_message(msg)
+                for message in messages:
+                    self.connection.privmsg(
+                        msg['channel'], message)
             elif msg['command'] == 'afk':
                 self.afk()
             elif msg['command'] == 'unafk':
