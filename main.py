@@ -188,6 +188,8 @@ def main():
             del puppet_dict[user['id']]
         if user['command'] == 'send' or user['command'] == 'afk' or user['command'] == 'unafk' \
            or user['command'] == 'nick' or user['command'] == 'join_part':
+            if user['command'] == 'nick':
+                user['irc_nick'] += configs['irc_config']['PuppetSuffix']
             puppet_main_queues[user['id']].put(user)
     for t in threads:
         t.join()
