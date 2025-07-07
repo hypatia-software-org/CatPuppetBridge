@@ -190,7 +190,10 @@ def main():
            or user['command'] == 'nick' or user['command'] == 'join_part':
             if user['command'] == 'nick':
                 user['irc_nick'] += configs['irc_config']['PuppetSuffix']
-            puppet_main_queues[user['id']].put(user)
+            try:
+                puppet_main_queues[user['id']].put(user)
+            except KeyError as e:
+                logging.error("Failed to add irc command to queue, queue missing for %i", user['id'])
     for t in threads:
         t.join()
 
