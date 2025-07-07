@@ -193,7 +193,8 @@ def main():
             try:
                 puppet_main_queues[user['id']].put(user)
             except KeyError as e:
-                logging.error("Failed to add irc command to queue, queue missing for %i", user['id'])
+                logging.error("Failed to add irc command to queue, missing %i", user['id'])
+                logging.error(e)
     for t in threads:
         t.join()
 
