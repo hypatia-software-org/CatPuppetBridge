@@ -305,7 +305,11 @@ class DiscordBot(discord.Client):
             if message.reference and message.reference.message_id:
                 try:
                     replied_to = await message.channel.fetch_message(message.reference.message_id)
-                    reply_author = await self.generate_irc_nickname(replied_to.author)
+                    if replied_to.webhook_id:
+                        split_author = replied_to.author.name.split('#')
+                        reply_author = split_author[0]
+                    else:
+                        reply_author = await self.generate_irc_nickname(replied_to.author)
 
                     replied_to_content = replied_to.content[:50]
                     replied_to_content = await self.replace_mentions(replied_to_content)
