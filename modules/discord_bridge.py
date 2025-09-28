@@ -201,7 +201,12 @@ class DiscordBot(discord.Client):
                     avatar = await self.find_avatar(msg['author'])
                     if avatar is None:
                         avatar = 'https://robohash.org/' + msg['author'] + '?set=set4'
-                    await webhook.send(processed_message, username=msg['author'], avatar_url=avatar)
+                    try:
+                        await webhook.send(processed_message, username=msg['author'],
+                                           avatar_url=avatar)
+                    except discord.errors.HTTPException:
+                        logging.warning("HTTP Error sending webhook. Author: '%s' Message: '%s'",
+                                        msg['author'], processed_message)
             except queue.Empty:
                 pass
             await asyncio.sleep(0.01)
