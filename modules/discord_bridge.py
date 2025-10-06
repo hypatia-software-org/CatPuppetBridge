@@ -160,8 +160,13 @@ class DiscordBot(discord.Client):
         if member.id in self.active_puppets:
             # Update lookup table
             self.active_puppets.remove(member.id)
-            del self.mention_lookup[member.irc_nick + self.listener_config['puppet_suffix']]
-            await self.compile_mention_lookup_re()
+            irc_nick = await self.generate_irc_nickname(member)
+            try:
+                del self.mention_lookup[irc_nick + self.listener_config['puppet_suffix']]
+                await self.compile_mention_lookup_re()
+            except KeyError:
+                logging.warning("Could not remove %s from mention_lookup table",
+                                member.display_name)
 
             await self.send_irc_command(member, 'die')
             logging.info("%s has left!", member.display_name)
