@@ -1,16 +1,96 @@
+# Example configuration for CatPuppetBridge, an IRC to Discord chat
+# bridge for all your bridging needs.
+################################################
+# ▞▀▖   ▐  ▛▀▖            ▐  ▛▀▖   ▗   ▌       #
+# ▌  ▝▀▖▜▀ ▙▄▘▌ ▌▛▀▖▛▀▖▞▀▖▜▀ ▙▄▘▙▀▖▄ ▞▀▌▞▀▌▞▀▖ #
+# ▌ ▖▞▀▌▐ ▖▌  ▌ ▌▙▄▘▙▄▘▛▀ ▐ ▖▌ ▌▌  ▐ ▌ ▌▚▄▌▛▀  #
+# ▝▀ ▝▀▘ ▀ ▘  ▝▀▘▌  ▌  ▝▀▘ ▀ ▀▀ ▘  ▀▘▝▀▘▗▄▘▝▀▘ #
+################################################
+
 [Links]
+###############
+# Links Block #
+###############
+# Links between IRC and Discord channels are controlled in this configuration
+# block. The format is: discord_channel_id = #ircchannel
+#
+# The Discord Channel ID can be found by right clicking on a Discord Channel and
+# clicking "Copy Channel ID". For example a valid entry might look like:
+# 9023840980958054 = #example_channel
+
 # discord_channel_id = #ircchannel
 
 [IRC]
+#############
+# IRC Block #
+#############
+# All IRC Connection setings and puppet settings are controlled here
+
+##########
+# Server #
+##########
+# Hostname or IP address of the IRC server to connect to
 Server = localhost
-BotChannel = #bots
-TLS = no
+
+########
+# Port #
+########
+# IRC port to connect to. Default for TLS is normally 6697
 Port = 6667
+
+#######
+# TLS #
+#######
+# Set to "yes" if the IRC server uses TLS
+TLS = no
+
+##############
+# BotChannel #
+##############
+# Channel to join the managment bot to
+BotChannel = #bots
+
+##################
+# BridgeNickname #
+##################
+# Name of the "IRC Bot" that is used to control the bridge from IRC
 BridgeNickname = DiscordBridge
+
+####################
+# ListenerNickname #
+####################
+# Name of the "IRC Bot" that relays text to discord
 ListenerNickname = _d2
+
+################
+# PuppetSuffix #
+################
+# Suffix is put onto the end of IRC Puppet usernames
 PuppetSuffix = _d2
+
+############################
+# PuppetDisplayNameMinSize #
+############################
+# Not recommended to change, controls the minium size of the IRC Puppet
+# username. The user is truncated when the username + display_name is too
+# long. This is the smallest size we truncate the username.
+PuppetDisplayNameMinSize = 6
+
+##################
+# WebIRCPassword #
+##################
+# It is recommended to use the bridge with WebIRC intergration, provide the
+# WebIRC password below to allow the bridge to use WebIRC.
 WebIRCPassword = 
 
 [Discord]
+#################
+# Discord Block #
+#################
+# Specific configuration for Discord intergration
+
+#########
+# Token #
+#########
 # Discord token
 Token = 
