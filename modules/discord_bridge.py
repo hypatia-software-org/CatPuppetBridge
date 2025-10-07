@@ -64,16 +64,19 @@ class DiscordBot(discord.Client):
         """Generate an irc nickname"""
         username = self.irc_safe_nickname(user.name)
         display_name = self.irc_safe_nickname(user.display_name)
-        reserved_size = 6
 
-        #still too big? shorten the username too (sheesh)
+        # 2 for [] around username + suffix
+        reserved_size = 2 + len(self.listener_config['puppet_suffix'])
+        min_size = self.listener_config['puppet_min_size']
+
         if len(display_name) + len(username) + reserved_size > self.max_puppet_username:
             remove_len = (len(display_name) + len(username) + reserved_size) \
                 - self.max_puppet_username
+            if remove_len > len(display_name):
+                remove_len = len(display_name) - min_size
             username = username[:len(username)-remove_len]
-
+        #still too big? shorten the display name too (sheesh)
         if len(display_name) + len(username) + reserved_size > self.max_puppet_username:
-            # +5, two for [] and 3 for prefix
             remove_len = (len(display_name) + len(username) + reserved_size) \
                 - self.max_puppet_username
             display_name = display_name[:len(display_name)-remove_len]
@@ -161,8 +164,13 @@ class DiscordBot(discord.Client):
         if member.id in self.active_puppets:
             # Update lookup table
             self.active_puppets.remove(member.id)
-            del self.mention_lookup[member.irc_nick + self.listener_config['puppet_suffix']]
-            await self.compile_mention_lookup_re()
+            irc_nick = await self.generate_irc_nickname(member)
+            try:
+                del self.mention_lookup[irc_nick + self.listener_config['puppet_suffix']]
+                await self.compile_mention_lookup_re()
+            except KeyError:
+                logging.warning("Could not remove %s from mention_lookup table",
+                                member.display_name)
 
             await self.send_irc_command(member, 'die')
             logging.info("%s has left!", member.display_name)
@@ -202,7 +210,12 @@ class DiscordBot(discord.Client):
                     avatar = await self.find_avatar(msg['author'])
                     if avatar is None:
                         avatar = 'https://robohash.org/' + msg['author'] + '?set=set4'
-                    await webhook.send(processed_message, username=msg['author'], avatar_url=avatar)
+                    try:
+                        await webhook.send(processed_message, username=msg['author'],
+                                           avatar_url=avatar)
+                    except discord.errors.HTTPException:
+                        logging.warning("HTTP Error sending webhook. Author: '%s' Message: '%s'",
+                                        msg['author'], processed_message)
             except queue.Empty:
                 pass
             await asyncio.sleep(0.01)
@@ -338,7 +351,11 @@ class DiscordBot(discord.Client):
             if message.reference and message.reference.message_id:
                 try:
                     replied_to = await message.channel.fetch_message(message.reference.message_id)
-                    reply_author = await self.generate_irc_nickname(replied_to.author)
+                    if replied_to.webhook_id:
+                        split_author = replied_to.author.name.split('#')
+                        reply_author = split_author[0]
+                    else:
+                        reply_author = await self.generate_irc_nickname(replied_to.author)
 
                     replied_to_content = replied_to.content[:50]
                     replied_to_content = await self.replace_mentions(replied_to_content)

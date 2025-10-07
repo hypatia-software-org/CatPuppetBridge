@@ -57,13 +57,13 @@ def check_required(required: list, config: dict, block: str):
     """Ensure required fields exist"""
     for req in required:
         if req not in config:
-            logging.error("Error: Required config in %s block %s is missing", block, required)
+            logging.error("Error: Required config in `%s` block `%s` is missing", block, req)
             sys.exit(1)
 
 def read_config(irc_required: list, discord_required: list, config, config_path: str):
     """Read the config file"""
     if 'IRC' not in config:
-        logging.error("Error: IRC block missing in %s", config_path)
+        logging.error("Error: IRC block missing in `%s`", config_path)
         sys.exit(1)
 
     irc_config = config['IRC']
@@ -77,7 +77,7 @@ def read_config(irc_required: list, discord_required: list, config, config_path:
     check_required(discord_required, discord_config, 'Discord')
 
     if 'Links' not in config:
-        logging.error("Error: Discord block missing in %s", config_path)
+        logging.error("Error: Links block missing in %s", config_path)
         sys.exit(1)
 
     channels_to_join = []
@@ -114,13 +114,15 @@ def main():
                            'BridgeNickName',
                            'ListenerNickname',
                            'PuppetSuffix',
+                           'PuppetDisplayNameMinSize',
                            'WebIRCPassword'],
                           ['ClientID',
                            'Token'],
                           config,
                           config_path)
 
-    discord_config = {'puppet_suffix': configs['irc_config']['PuppetSuffix']}
+    discord_config = {'puppet_suffix': configs['irc_config']['PuppetSuffix'],
+                      'puppet_min_size': configs['irc_config']['PuppetDisplayNameMinSize']}
     irc_config = {
         'puppet_suffix': configs['irc_config']['PuppetSuffix'],
         'tls': configs['irc_config']['TLS'],
@@ -187,7 +189,13 @@ def main():
             puppet_dict[user['id']].join()
             del puppet_dict[user['id']]
         else:
-            puppet_main_queues[user['id']].put(user)
+            if user['command'] == 'nick':
+                user['irc_nick'] += configs['irc_config']['PuppetSuffix']
+            try:
+                puppet_main_queues[user['id']].put(user)
+            except KeyError as e:
+                logging.error("Failed to add irc command to queue, missing %i", user['id'])
+                logging.error(e)
     for t in threads:
         t.join()
 
