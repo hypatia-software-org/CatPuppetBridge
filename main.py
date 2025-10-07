@@ -132,7 +132,6 @@ def main():
         'listener_nickname': configs['irc_config']['ListenerNickname'],
         'server': configs['irc_config']['Server'],
         'port': int(configs['irc_config']['Port']),
-        'puppet_min_displayname_size': int(configs['irc_config']['PuppetDisplayNameMinSize']),
         'webirc_password': configs['irc_config']['WebIRCPassword']
     }
 
