@@ -63,8 +63,8 @@ class DiscordBot(discord.Client):
         """Generate an irc nickname"""
         username = self.irc_safe_nickname(user.name)
         display_name = self.irc_safe_nickname(user.display_name)
-        reserved_size = 2 + len(self.config['puppet_suffix']) # 2 for [] around username + suffix
-        min_size = self.config['puppet_min_size']
+        reserved_size = 2 + len(self.listener_config['puppet_suffix']) # 2 for [] around username + suffix
+        min_size = self.listener_config['puppet_min_size']
 
         if len(display_name) + len(username) + reserved_size > self.max_puppet_username:
             remove_len = (len(display_name) + len(username) + reserved_size) \
