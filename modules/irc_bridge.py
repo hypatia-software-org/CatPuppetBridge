@@ -53,11 +53,12 @@ class IRCPuppet(irc.client.SimpleIRCClient):
             )
 
         self.connection.add_global_handler("welcome", self.on_welcome)
-        self.connection.add_global_handler("on_privmsg", self.on_privmsg)
+        self.connection.add_global_handler("privmsg", self.on_privmsg)
 
     def on_privmsg(self, c, event):
         """Process DMs and pass to discord user"""
         logging.debug("conext %s", c)
+        logging.info("DM found, adding to queue")
         nickname = event.source.split('!', 1)[0]
         data = {
             'author': nickname,
@@ -81,6 +82,14 @@ class IRCPuppet(irc.client.SimpleIRCClient):
                     if str(msg['channel']) in self.discord_to_irc_links.keys():
                         self.connection.privmsg(
                             self.discord_to_irc_links[str(msg['channel'])], message)
+            elif msg['command'] == 'send_dm':
+                if msg['data'] is None:
+                    continue
+                logging.info("Found send, sending DM from puppet %s", self.config['nickname'])
+                messages = self.split_irc_message(msg)
+                for message in messages:
+                    self.connection.privmsg(
+                        msg['channel'], message)
             elif msg['command'] == 'afk':
                 self.afk()
             elif msg['command'] == 'unafk':

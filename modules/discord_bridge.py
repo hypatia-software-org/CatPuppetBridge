@@ -45,6 +45,7 @@ class DiscordBot(discord.Client):
 
         #asyncio.create_task(self.process_queue())
         self.loop.create_task(self.process_queue())
+        self.loop.create_task(self.process_dm_queue())
         self.ready = True
 
     def irc_safe_nickname(self, nickname: str) -> str:
@@ -92,7 +93,7 @@ class DiscordBot(discord.Client):
         self.active_puppets.append(user.id)
 
         await self.compile_mention_lookup_re(user)
-        logging.info("%s is now active! (status: %s)", user.display_name, user.status)
+        logging.info("%s is now active!", user.display_name)
 
     async def compile_mention_lookup_re(self, user: discord.Member = None):
         """Compile our regex for looking up mentions"""
@@ -215,6 +216,38 @@ class DiscordBot(discord.Client):
                     except discord.errors.HTTPException:
                         logging.warning("HTTP Error sending webhook. Author: '%s' Message: '%s'",
                                         msg['author'], processed_message)
+            except queue.Empty:
+                pass
+            await asyncio.sleep(0.01)
+
+    async def process_dm_queue(self):
+        """Thread to process our incoming dm_queue from IRC private messages"""
+        while True:
+        # Periodically check the queue and send messages
+            try:
+                msg = self.queues['dm_out_queue'].get(timeout=0.5)
+                target = None
+                user = None
+
+                if self.mention_lookup_re:
+                    target = self.mention_lookup_re.sub(
+                        lambda match: self.mention_lookup[match.group(0)].mention,
+                        msg['channel'])
+                    user_id = re.match(r"<@!?(\d+)>", target)
+                    user = await self.fetch_user(user_id.group(1))
+                if user:
+                    # detect mentions
+                    processed_message = msg['content']
+                    if self.mention_lookup_re:
+                        processed_message = self.mention_lookup_re.sub(
+                            lambda match: self.mention_lookup[match.group(0)].mention,
+                            msg['content'])
+                        processed_message = 'Message from IRC user ' + msg['author'] + ': ' +\
+                            processed_message
+                    try:
+                        await user.send(processed_message)
+                    except discord.errors.HTTPException as e:
+                        logging.warn(e)
             except queue.Empty:
                 pass
             await asyncio.sleep(0.01)
@@ -357,11 +390,47 @@ class DiscordBot(discord.Client):
 
     async def on_message(self, message):
         """Run when messages are read from discord"""
+
         # Make sure we are ready first
         if not self.ready:
             return
         # Don't repeat messages
-        if message.author.bot and message.webhook_id is not None:
+        if message.author.bot or message.webhook_id is not None:
+            return
+
+        if isinstance(message.channel, discord.DMChannel):
+            logging.info("Discord bot received a DM, processing")
+
+            dm_user = await self.fetch_user(message.author.id)
+            if not self.active_puppets or message.author.id not in self.active_puppets:
+                await self.activate_puppet(dm_user)
+            reply = ''
+            split_msg = message.content.split()
+            command = split_msg[0] if len(split_msg) >= 1 else None
+            if command == 'help':
+                # pylint: disable=line-too-long
+                reply = 'This is the CatPuppetBridge bot, that links Discord to IRC. Here is a list of commands:\n'\
+                '* `dm USERNAME MESSAGE` - Send a Direct Message to a user on IRC. For example: `dm coolusername Whats up?` would DM `coolusername` on IRC the message `Whats up?`\n'\
+                '* `session USERNAME` - Open a session with a user on IRC. All messages typed to this bot will be sent to the user until the session is ended\n'\
+                '* `sessionend` - End a session with an IRC user\n'
+            elif command == 'dm':
+                if len(split_msg) >= 3:
+                    target_user = split_msg[1]
+                    dm = ' '.join(split_msg[2:])
+                    await self.send_irc_command(message.author, 'send_dm', dm, target_user)
+                else:
+                    reply = 'Not enough parameters. Be sure to type `dm USERNAME MESSAGE`'
+            elif command == "session":
+                if len(split_msg) >= 2:
+                    target_user = split_msg[1]
+                else:
+                    reply = 'Not enough parameters. Be sure to type `session USERNAME`'
+            else:
+                reply = 'Command not found, try using the command `help` for more information.'
+            try:
+                await dm_user.send(reply)
+            except discord.errors.HTTPException as e:
+                logging.error(e)
             return
 
         if not self.active_puppets or message.author.id not in self.active_puppets:
