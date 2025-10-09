@@ -11,4 +11,4 @@ The following versions will continue to recive security updates until 1 year aft
 
 ## Reporting a Vulnerability
 
-Vulnerabilities shoudl be reported reported on our issue tracker https://github.com/hypatia-software-org/CatPuppetBridge/issues
+Vulnerabilities should be reported reported on our issue tracker https://github.com/hypatia-software-org/CatPuppetBridge/issues
