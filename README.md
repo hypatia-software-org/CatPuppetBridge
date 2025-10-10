@@ -66,7 +66,7 @@ For testing we recommend using `irc.server` implementation for testing.
 * Activate the virtualenv
 ```source .venv/bin/activate```
 * Install dependencies into the `virtualenv`
-```pip install requirements/prod.txt```
+```pip install requirements/prod-requirements.txt```
 * Run the bridge:
 ```python main.py```
 
