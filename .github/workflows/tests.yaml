@@ -1,0 +1,26 @@
+name: Tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Run make tests using pytest Docker image
+        run: |
+          docker run --rm \
+            -v ${{ github.workspace }}:/app \
+            -w /app \
+            python:3.11-slim \
+            bash -c "apt-get update \
+              && apt-get install -y make \
+              && pip install -r requirements/prod-requirements.txt \
+              && pip install -r requirements/dev-requirements.txt && make test"
