@@ -122,7 +122,7 @@ def main():
                           config_path)
 
     discord_config = {'puppet_suffix': configs['irc_config']['PuppetSuffix'],
-                      'puppet_min_size': configs['irc_config']['PuppetDisplayNameMinSize']}
+                      'puppet_min_size': int(configs['irc_config']['PuppetDisplayNameMinSize'])}
     irc_config = {
         'puppet_suffix': configs['irc_config']['PuppetSuffix'],
         'tls': configs['irc_config']['TLS'],
