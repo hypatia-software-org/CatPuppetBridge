@@ -1,3 +1,5 @@
+[![Tests](https://github.com/hypatia-software-org/CatPuppetBridge/actions/workflows/tests.yaml/badge.svg?branch=main)](https://github.com/hypatia-software-org/CatPuppetBridge/actions/workflows/tests.yaml) [![Lint](https://github.com/hypatia-software-org/CatPuppetBridge/actions/workflows/lint.yml/badge.svg)](https://github.com/hypatia-software-org/CatPuppetBridge/actions/workflows/lint.yml) [![Dependabot Updates](https://github.com/hypatia-software-org/CatPuppetBridge/actions/workflows/dependabot/dependabot-updates/badge.svg)](https://github.com/hypatia-software-org/CatPuppetBridge/actions/workflows/dependabot/dependabot-updates)
+
 # Cat Puppet Bridge
 
 A modern bridge from IRC to Discord which uses "puppets" (fake IRC Users controlled by the bridge) to make integration more seamless. The name comes from the UNIX command `cat` which concatenates data and outputs it to the screen, or in this case we are cating our data out to a `puppet` to bridge it. Hence the name `Cat Puppet Bridge`.
@@ -22,10 +24,6 @@ A modern bridge from IRC to Discord which uses "puppets" (fake IRC Users control
 * A discord Guild you have administrative permissions on
 
 ## Developing
-
-### Status
-
-[![Tests](https://github.com/hypatia-software-org/CatPuppetBridge/actions/workflows/tests.yaml/badge.svg?branch=main)](https://github.com/hypatia-software-org/CatPuppetBridge/actions/workflows/tests.yaml) [![Lint](https://github.com/hypatia-software-org/CatPuppetBridge/actions/workflows/lint.yml/badge.svg)](https://github.com/hypatia-software-org/CatPuppetBridge/actions/workflows/lint.yml) [![Dependabot Updates](https://github.com/hypatia-software-org/CatPuppetBridge/actions/workflows/dependabot/dependabot-updates/badge.svg)](https://github.com/hypatia-software-org/CatPuppetBridge/actions/workflows/dependabot/dependabot-updates)
 
 ### Prerequisites
 
