@@ -23,6 +23,10 @@ A modern bridge from IRC to Discord which uses "puppets" (fake IRC Users control
 
 ## Developing
 
+### Status
+
+[![Tests](https://github.com/hypatia-software-org/CatPuppetBridge/actions/workflows/tests.yaml/badge.svg?branch=main)](https://github.com/hypatia-software-org/CatPuppetBridge/actions/workflows/tests.yaml) [![Lint](https://github.com/hypatia-software-org/CatPuppetBridge/actions/workflows/lint.yml/badge.svg)](https://github.com/hypatia-software-org/CatPuppetBridge/actions/workflows/lint.yml) [![Dependabot Updates](https://github.com/hypatia-software-org/CatPuppetBridge/actions/workflows/dependabot/dependabot-updates/badge.svg)](https://github.com/hypatia-software-org/CatPuppetBridge/actions/workflows/dependabot/dependabot-updates)
+
 ### Prerequisites
 
 * A `Discord Server` to invite the bot to
