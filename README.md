@@ -1,5 +1,10 @@
-# Features
+# Cat Puppet Bridge
 
+A modern bridge from IRC to Discord which uses "puppets" (fake IRC Users controlled by the bridge) to make integration more seamless. The name comes from the UNIX command `cat` which concatenates data and outputs it to the screen, or in this case we are cating our data out to a `puppet` to bridge it. Hence the name `Cat Puppet Bridge`.
+
+## Features
+
+* Uses WebIRC for enhanced security (makes it harder for people to impersonate a bot)
 * IRC Puppets of Discord users
   * Puppets only join linked channels that they have permissions to be in (we may be the only bridge that does this!)
   * Puppets will quit when the user leaves the discord Guild
