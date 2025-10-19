@@ -31,6 +31,7 @@ A modern bridge from IRC to Discord which uses "puppets" (fake IRC Users control
 ## Python Compatibility
 
 |Release    | 3.10              | 3.11               | 3.12               | 3.13               | 3.14              |
+|-----------|-------------------|--------------------|--------------------|--------------------|-------------------|
 | >= 1.1.3  |:heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: |:heavy_check_mark: |
 | <= 1.1.2  |:heavy_check_mark: | :heavy_check_mark: | :x:                | :x:                |:x:                |
 
