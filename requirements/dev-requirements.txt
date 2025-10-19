@@ -1,3 +1,4 @@
 pytest
-pylint
+pytest-timeout
 pytest-asyncio
+pylint
