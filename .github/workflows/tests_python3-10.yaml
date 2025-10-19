@@ -1,4 +1,4 @@
-name: Tests
+name: Tests (Python 3.10)
 
 on:
   push:
@@ -19,7 +19,7 @@ jobs:
           docker run --rm \
             -v ${{ github.workspace }}:/app \
             -w /app \
-            python:3.11-slim \
+            python:3.10-slim \
             bash -c "apt-get update \
               && apt-get install -y make \
               && pip install -r requirements/prod-requirements.txt \
