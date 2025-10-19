@@ -44,7 +44,8 @@ class IRCPuppet(irc.client.SimpleIRCClient):
             context.check_hostname = False
             context.verify_mode = ssl.CERT_NONE
             context.minimum_version = ssl.TLSVersion.TLSv1_2
-            ssl_factory = Factory(wrapper=lambda sock: context.wrap_socket(sock, server_hostname=config['server']))
+            ssl_factory = Factory(
+                wrapper=lambda sock: context.wrap_socket(sock,server_hostname=config['server']))
 
             self.connection = self.reactor.server().connect(
                 self.config['server'], self.config['port'], self.config['nickname'],
@@ -204,7 +205,8 @@ class IRCListener(irc.client.SimpleIRCClient):
             context.check_hostname = False
             context.verify_mode = ssl.CERT_NONE
             context.minimum_version = ssl.TLSVersion.TLSv1_2
-            ssl_factory = Factory(wrapper=lambda sock: context.wrap_socket(sock, server_hostname=config['server']))
+            ssl_factory = Factory(
+                wrapper=lambda sock: context.wrap_socket(sock, server_hostname=config['server']))
 
             self.connection = self.reactor.server().connect(
                 config['server'], config['port'], config['listener_nickname'],
@@ -268,7 +270,8 @@ class IRCBot(irc.bot.SingleServerIRCBot):
             context.check_hostname = False
             context.verify_mode = ssl.CERT_NONE
             context.minimum_version = ssl.TLSVersion.TLSv1_2
-            ssl_factory = Factory(wrapper=lambda sock: context.wrap_socket(sock, server_hostname=config['server']))
+            ssl_factory = Factory(
+                wrapper=lambda sock: context.wrap_socket(sock, server_hostname=config['server']))
 
             irc.bot.SingleServerIRCBot.__init__(
                 self, [(config['server'], config['port'])],
