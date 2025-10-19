@@ -40,7 +40,13 @@ class IRCPuppet(irc.client.SimpleIRCClient):
         self.config['webirc_hostname'] = 'discord.bridge'
         self.end_thread = False
         if config['tls'] == "yes":
-            ssl_factory = Factory(wrapper=ssl.wrap_socket)
+            context = ssl.create_default_context(ssl.Purpose.SERVER_AUTH)
+            context.check_hostname = False
+            context.verify_mode = ssl.CERT_NONE
+            context.minimum_version = ssl.TLSVersion.TLSv1_2
+            ssl_factory = Factory(
+                wrapper=lambda sock: context.wrap_socket(sock,server_hostname=config['server']))
+
             self.connection = self.reactor.server().connect(
                 self.config['server'], self.config['port'], self.config['nickname'],
                 connect_factory=ssl_factory)
@@ -195,7 +201,13 @@ class IRCListener(irc.client.SimpleIRCClient):
         self.reactor = irc.client.Reactor()
         # TODO: ircname
         if config['tls'] == "yes":
-            ssl_factory = Factory(wrapper=ssl.wrap_socket)
+            context = ssl.create_default_context(ssl.Purpose.SERVER_AUTH)
+            context.check_hostname = False
+            context.verify_mode = ssl.CERT_NONE
+            context.minimum_version = ssl.TLSVersion.TLSv1_2
+            ssl_factory = Factory(
+                wrapper=lambda sock: context.wrap_socket(sock, server_hostname=config['server']))
+
             self.connection = self.reactor.server().connect(
                 config['server'], config['port'], config['listener_nickname'],
                 connect_factory=ssl_factory
@@ -254,7 +266,13 @@ class IRCBot(irc.bot.SingleServerIRCBot):
     """Generic bot for running admin commands on the bridge from IRC"""
     def __init__(self, config):
         if config['tls'] == "yes":
-            ssl_factory = Factory(wrapper=ssl.wrap_socket)
+            context = ssl.create_default_context(ssl.Purpose.SERVER_AUTH)
+            context.check_hostname = False
+            context.verify_mode = ssl.CERT_NONE
+            context.minimum_version = ssl.TLSVersion.TLSv1_2
+            ssl_factory = Factory(
+                wrapper=lambda sock: context.wrap_socket(sock, server_hostname=config['server']))
+
             irc.bot.SingleServerIRCBot.__init__(
                 self, [(config['server'], config['port'])],
                 config['bot_nickname'], config['bot_nickname'], connect_factory=ssl_factory)
