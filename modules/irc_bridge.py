@@ -28,7 +28,6 @@ class IRCPuppet(irc.client.SimpleIRCClient):
     def __init__(self, queues, discord_to_irc_links, puppet_config,
                  config):
         super().__init__()
-        ssl_factory = Factory(wrapper=ssl.wrap_socket)
         self.reactor = irc.client.Reactor()
 
         # TODO: ircname
@@ -41,6 +40,7 @@ class IRCPuppet(irc.client.SimpleIRCClient):
         self.config['webirc_hostname'] = 'discord.bridge'
         self.end_thread = False
         if config['tls'] == "yes":
+            ssl_factory = Factory(wrapper=ssl.wrap_socket)
             self.connection = self.reactor.server().connect(
                 self.config['server'], self.config['port'], self.config['nickname'],
                 connect_factory=ssl_factory)
@@ -192,10 +192,10 @@ class IRCListener(irc.client.SimpleIRCClient):
 
     def __init__(self, out_queue, config):
         super().__init__()
-        ssl_factory = Factory(wrapper=ssl.wrap_socket)
         self.reactor = irc.client.Reactor()
         # TODO: ircname
         if config['tls'] == "yes":
+            ssl_factory = Factory(wrapper=ssl.wrap_socket)
             self.connection = self.reactor.server().connect(
                 config['server'], config['port'], config['listener_nickname'],
                 connect_factory=ssl_factory
