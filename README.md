@@ -19,11 +19,12 @@ A modern bridge from IRC to Discord which uses "puppets" (fake IRC Users control
   
 ## Current Python Compatibility
 |Python Version| Test Status|
-|3.10| [![Tests (Python 3.10)](https://github.com/hypatia-software-org/CatPuppetBridge/actions/workflows/tests_python3-10.yaml/badge.svg)](https://github.com/hypatia-software-org/CatPuppetBridge/actions/workflows/tests_python3-10.yaml)|
-|3.11| [![Tests (Python 3.11)](https://github.com/hypatia-software-org/CatPuppetBridge/actions/workflows/tests_python3-11.yaml/badge.svg)](https://github.com/hypatia-software-org/CatPuppetBridge/actions/workflows/tests_python3-11.yaml)|
-|3.12| [![Tests (Python 3.12)](https://github.com/hypatia-software-org/CatPuppetBridge/actions/workflows/tests_python3-12.yaml/badge.svg)](https://github.com/hypatia-software-org/CatPuppetBridge/actions/workflows/tests_python3-12.yaml)|
-|3.13| [![Tests (Python 3.13)](https://github.com/hypatia-software-org/CatPuppetBridge/actions/workflows/tests_python3-13.yaml/badge.svg)](https://github.com/hypatia-software-org/CatPuppetBridge/actions/workflows/tests_python3-13.yaml)|
-|3.14| [![Tests (Python 3.14)](https://github.com/hypatia-software-org/CatPuppetBridge/actions/workflows/tests_python3-14.yaml/badge.svg)](https://github.com/hypatia-software-org/CatPuppetBridge/actions/workflows/tests_python3-14.yaml)|
+|--------------|------------|
+| 3.10 | [![Tests (Python 3.10)](https://github.com/hypatia-software-org/CatPuppetBridge/actions/workflows/tests_python3-10.yaml/badge.svg)](https://github.com/hypatia-software-org/CatPuppetBridge/actions/workflows/tests_python3-10.yaml)|
+| 3.11 | [![Tests (Python 3.11)](https://github.com/hypatia-software-org/CatPuppetBridge/actions/workflows/tests_python3-11.yaml/badge.svg)](https://github.com/hypatia-software-org/CatPuppetBridge/actions/workflows/tests_python3-11.yaml)|
+| 3.12 | [![Tests (Python 3.12)](https://github.com/hypatia-software-org/CatPuppetBridge/actions/workflows/tests_python3-12.yaml/badge.svg)](https://github.com/hypatia-software-org/CatPuppetBridge/actions/workflows/tests_python3-12.yaml)|
+| 3.13 | [![Tests (Python 3.13)](https://github.com/hypatia-software-org/CatPuppetBridge/actions/workflows/tests_python3-13.yaml/badge.svg)](https://github.com/hypatia-software-org/CatPuppetBridge/actions/workflows/tests_python3-13.yaml)|
+| 3.14 | [![Tests (Python 3.14)](https://github.com/hypatia-software-org/CatPuppetBridge/actions/workflows/tests_python3-14.yaml/badge.svg)](https://github.com/hypatia-software-org/CatPuppetBridge/actions/workflows/tests_python3-14.yaml)|
 
 # Installing
 
