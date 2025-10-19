@@ -28,7 +28,7 @@ A modern bridge from IRC to Discord which uses "puppets" (fake IRC Users control
 | 3.13 | [![Tests (Python 3.13)](https://github.com/hypatia-software-org/CatPuppetBridge/actions/workflows/tests_python3-13.yaml/badge.svg)](https://github.com/hypatia-software-org/CatPuppetBridge/actions/workflows/tests_python3-13.yaml)|
 | 3.14 | [![Tests (Python 3.14)](https://github.com/hypatia-software-org/CatPuppetBridge/actions/workflows/tests_python3-14.yaml/badge.svg)](https://github.com/hypatia-software-org/CatPuppetBridge/actions/workflows/tests_python3-14.yaml)|
 
-## Python Compatibility
+### Previous Release Python Compatibility 
 
 |Release    | 3.10              | 3.11               | 3.12               | 3.13               | 3.14              |
 |-----------|-------------------|--------------------|--------------------|--------------------|-------------------|
