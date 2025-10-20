@@ -16,7 +16,7 @@
 
 
 lint:
-	pylint --rcfile=.pylintrc main.py modules
+	pylint --rcfile=.pylintrc src/main.py src/modules
 test:
 	pytest -v --timeout=10
 build-pypi:
