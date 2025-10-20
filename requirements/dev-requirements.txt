@@ -1,4 +1,4 @@
-pytest
-pytest-timeout
-pytest-asyncio
-pylint
+pytest==8.4.2
+pytest-timeout==2.4.0
+pytest-asyncio==1.2.0
+pylint==4.0.1

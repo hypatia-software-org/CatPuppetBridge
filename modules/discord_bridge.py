@@ -23,6 +23,7 @@ import logging
 import time
 import queue
 import asyncio
+import emoji
 
 import discord
 
@@ -227,6 +228,8 @@ class DiscordBot(discord.Client):
                     avatar = await self.find_avatar(msg['author'])
                     if avatar is None:
                         avatar = 'https://robohash.org/' + msg['author'] + '?set=set4'
+                    # Detect emojis
+                    processed_message = await self.replace_emojis(processed_message)
                     try:
                         await webhook.send(processed_message, username=msg['author'],
                                            avatar_url=avatar)
@@ -236,6 +239,22 @@ class DiscordBot(discord.Client):
             except queue.Empty:
                 pass
             await asyncio.sleep(0.01)
+
+    async def replace_emojis(self, processed_message):
+        """ Replace strings like :heart: with their unicode emoji, or discord custom emoji """
+        def replace(match):
+            found_emoji = match.group(1)
+            for discord_emoji in self.emojis:
+                if discord_emoji.name == found_emoji:
+                    return str(discord_emoji)
+            unicode_emoji = emoji.emojize(f":{found_emoji}:", language='alias')
+            if unicode_emoji != f":{found_emoji}:":
+                return unicode_emoji
+
+            # Fallback if not found
+            return f":{found_emoji}:"
+
+        return re.sub(r":([a-zA-Z0-9_]+):", replace, processed_message)
 
     async def find_avatar(self, user):
         """Find an avatar if user exists on irc and discord"""
