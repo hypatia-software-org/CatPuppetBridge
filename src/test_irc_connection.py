@@ -74,7 +74,7 @@ def ssl_proxy():
     context.check_hostname = False
     context.verify_mode = ssl.CERT_NONE
 
-    context.load_cert_chain(certfile="tests/server.crt", keyfile="tests/server.key")
+    context.load_cert_chain(certfile="src/tests/server.crt", keyfile="src/tests/server.key")
 
     server_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     server_sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
