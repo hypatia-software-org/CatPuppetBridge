@@ -1,0 +1,10 @@
+#!/usr/bin/make -f
+%:
+	dh $@ --with python3
+override_dh_auto_install:
+	dh_auto_install
+	mkdir -p debian/usr/bin
+	ln -s /usr/lib/catpuppetbridge/main.py debian/usr/bin/catpuppetbridge
+override_dh_auto_clean:
+	dh_auto_clean
+	rm -f debian/usr/bin/catpuppetbridge

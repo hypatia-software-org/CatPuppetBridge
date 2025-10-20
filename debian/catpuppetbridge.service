@@ -1,0 +1,11 @@
+[Unit]
+Description=CatPuppetBridge IRC to Discord service
+After=network.target
+
+[Service]
+ExecStart=/usr/bin/catpuppetbridge
+Restart=always
+User=catpuppet
+
+[Install]
+WantedBy=multi-user.target

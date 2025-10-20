@@ -1,0 +1,2 @@
+debian/catpuppetbridge.service lib/systemd/system/
+src/* usr/lib/catpuppetbridge/

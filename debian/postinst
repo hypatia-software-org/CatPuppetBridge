@@ -1,0 +1,14 @@
+#!/bin/sh
+set -e
+
+case "$1" in
+    configure)
+        if ! id -u catpuppetbridge >/dev/null 2>&1; then
+            adduser --system --group --no-create-home \
+                --disabled-login --shell /usr/sbin/nologin \
+                catpuppetbridge
+        fi
+    ;;
+esac
+
+exit 0
