@@ -21,3 +21,5 @@ test:
 	pytest -v --timeout=10
 build-pypi:
 	python3 -m build
+clean:
+	rm -f dist/*
