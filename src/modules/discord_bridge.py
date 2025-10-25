@@ -156,8 +156,8 @@ class DiscordBot(discord.Client):
             "T": "%H:%M:%S",
             "d": "%m/%d/%Y",
             "D": "%B %d, %Y",
-            "f": "%B %d, %Y %H:%M",
-            "F": "%A, %B %d, %Y %H:%M",
+            "f": "%B %d, %Y at %H:%M",
+            "F": "%A, %B %d, %Y at %H:%M",
         }
 
         if fmt == "R":
