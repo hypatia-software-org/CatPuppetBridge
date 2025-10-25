@@ -17,6 +17,7 @@
 PROGRAM := catpuppetbridge
 VERSION := $(shell dpkg-parsechangelog --show-field Version 2>/dev/null)
 TAG := v$(VERSION)
+PREFIX := '/usr/local'
 
 DEB_FILE := ../$(PROGRAM)_$(VERSION)_all.deb
 SIG_FILE := $(DEB_FILE).sig
@@ -40,3 +41,25 @@ debian-sign: debian-pkg
 	gpg --output $(SIG_FILE) --detach-sign $(DEB_FILE)
 debian-upload: debian-sign
 	gh release upload $(TAG) $(DEB_FILE) $(SIG_FILE) --clobbe
+install:
+	mkdir -p $(PREFIX)/lib/catpuppetbridge
+	cp -r src/* $(PREFIX)/lib/catpuppetbridge
+	ln -fs $(PREFIX)/lib/catpuppetbridge/main.py $(PREFIX)/bin/catpuppetbridge
+	chmod 555 $(PREFIX)/bin/catpuppetbridge
+	cp -n catbridge.ini.default /etc/catbridge.ini
+install-venv: install install-systemd
+	virtualenv $(PREFIX)/lib/catpuppetbridge/venv
+	sed "s_ExecStart=$(PRFIX)/bin_ExecStart=/usr/local/lib/catpuppetbridge/venv _" -i /etc/systemd/system/catpuppetbridge.service
+	systemctl daemon-reload
+install-systemd:
+	cp debian/catpuppetbridge.service /etc/systemd/system/
+	sed "s_PREFIX_$(PREFIX)_" -i /etc/systemd/system/catpuppetbridge.service
+	systemctl daemon-reload
+install-user:
+	adduser --system --group --home $(PREFIX)/lib/catpuppetbridge --disabled-login --shell /usr/sbin/nologin catpuppet
+uninstall:
+	rm -rf $(PREFIX)/lib/catpuppetbridge
+	rm -f $(PREFIX)/bin/catpuppetbridge
+	rm -f /etc/catbridge.ini
+	rm -f /etc/systemd/system/catpuppetbridge.service
+	systemctl daemon-reload
