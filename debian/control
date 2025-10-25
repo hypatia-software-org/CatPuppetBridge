@@ -1,13 +1,13 @@
 Source: catpuppetbridge
-Section: python
+Section: contrib/python
 Priority: optional
 Maintainer: Lisa <lisa.marie@hypatiahelps.org>
-Build-Depends: debhelper-compat (= 13), python3, python3-irc, python3-discord, python3-emoji
-Standards-Version: 4.6.2
+Build-Depends: debhelper-compat (= 13), python3, dh-python
+Standards-Version: 4.6.0.1
 Homepage: https://github.com/hypatia-software-org/CatPuppetBridge
 
 Package: catpuppetbridge
 Architecture: all
-Depends: ${misc:Depends}, ${python3:Depends}, python3-requests, python3-redis
-Description: A modern IRC to Discord bridge
+Depends: ${misc:Depends}, ${python3:Depends}, python3-discord, python3-emoji, adduser
+Description: Modern IRC to Discord bridge
  CatPuppetBridge creates a bridge between IRC and Discord

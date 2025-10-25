@@ -1,12 +1,11 @@
-#!/bin/sh
-set -e
-
+#!/bin/sh -e
+#DEBHELPER#
 case "$1" in
     configure)
-        if ! id -u catpuppetbridge >/dev/null 2>&1; then
-            adduser --system --group --no-create-home \
+        if ! id -u catpuppet >/dev/null 2>&1; then
+            adduser --system --group --home /usr/lib/catpuppetbridge \
                 --disabled-login --shell /usr/sbin/nologin \
-                catpuppetbridge
+                catpuppet
         fi
     ;;
 esac

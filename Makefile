@@ -14,6 +14,12 @@
 #
 # Copyright (C) 2025 Lisa Marie Maginnis
 
+PROGRAM := catpuppetbridge
+VERSION := $(shell dpkg-parsechangelog --show-field Version 2>/dev/null)
+TAG := v$(VERSION)
+
+DEB_FILE := ../$(PROGRAM)_$(VERSION)_all.deb
+SIG_FILE := $(DEB_FILE).sig
 
 lint:
 	pylint --rcfile=.pylintrc src/main.py src/modules
@@ -23,3 +29,14 @@ build-pypi:
 	python3 -m build
 clean:
 	rm -f dist/*
+release:
+	git checkout main
+	git pull origin main
+	git tag $(TAG)
+	git push tag $(TAG)
+debian-pkg:
+	dpkg-buildpackage -us -uc -d
+debian-sign: debian-pkg
+	gpg --output $(SIG_FILE) --detach-sign $(DEB_FILE)
+debian-upload: debian-sign
+	gh release upload $(TAG) $(DEB_FILE) $(SIG_FILE) --clobbe
