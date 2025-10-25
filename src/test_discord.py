@@ -315,14 +315,14 @@ async def test_covert_discord_time_default(bot):
     time = '<t:1761385165>'
     human_time = bot.replace_time(time)
 
-    assert human_time == 'October 25, 2025 09:39'
+    assert human_time == 'October 25, 2025 at 09:39'
 
 @pytest.mark.asyncio
 async def test_covert_discord_time_default_with_text(bot):
     time = 'Lets meet at <t:1761385165> for the meeting!'
     human_time = bot.replace_time(time)
 
-    assert human_time == 'Lets meet at October 25, 2025 09:39 for the meeting!'
+    assert human_time == 'Lets meet at October 25, 2025 at 09:39 for the meeting!'
 
 @pytest.mark.asyncio
 async def test_covert_discord_time_relative(bot):
