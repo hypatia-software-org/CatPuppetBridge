@@ -3,9 +3,9 @@ Description=CatPuppetBridge IRC to Discord service
 After=network.target
 
 [Service]
-ExecStart=PREFIX/local/bin/catpuppetbridge
+ExecStart=PREFIX/bin/catpuppetbridge
 Restart=always
-User=catpuppet
+User=catbridge
 
 [Install]
 WantedBy=multi-user.target
