@@ -309,3 +309,42 @@ async def test_dont_find_avatar(bot):
     nickname = 'Bob'
     avatar = await bot.find_avatar(nickname)
     assert avatar == None
+
+@pytest.mark.asyncio
+async def test_covert_discord_time_default(bot):
+    time = '<t:1761385165>'
+    human_time = bot.replace_time(time)
+
+    assert human_time == 'October 25, 2025 09:39'
+
+@pytest.mark.asyncio
+async def test_covert_discord_time_default_with_text(bot):
+    time = 'Lets meet at <t:1761385165> for the meeting!'
+    human_time = bot.replace_time(time)
+
+    assert human_time == 'Lets meet at October 25, 2025 09:39 for the meeting!'
+
+@pytest.mark.asyncio
+async def test_covert_discord_time_relative(bot):
+    import time
+    ts = int(time.time()) - 60*60*5
+    time = f'<t:{ts}:R>'.format(ts)
+    human_time = bot.replace_time(time)
+
+    assert human_time == '5 hours ago'
+
+@pytest.mark.asyncio
+async def test_covert_discord_time_secs(bot):
+    ts = '1761385165'
+    time = f'<t:{ts}:T>'.format(ts)
+    human_time = bot.replace_time(time)
+
+    assert human_time == '09:39:25'
+
+@pytest.mark.asyncio
+async def test_covert_discord_time(bot):
+    ts = '1761385165'
+    time = f'<t:{ts}:t>'.format(ts)
+    human_time = bot.replace_time(time)
+
+    assert human_time == '09:39'
