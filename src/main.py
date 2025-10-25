@@ -135,8 +135,7 @@ def main():
                            'PuppetSuffix',
                            'PuppetDisplayNameMinSize',
                            'WebIRCPassword'],
-                          ['ClientID',
-                           'Token'],
+                          ['Token'],
                           config,
                           config_path)
 

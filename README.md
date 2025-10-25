@@ -42,6 +42,21 @@ A modern bridge from IRC to Discord which uses "puppets" (fake IRC Users control
 * An IRC Server to connect to
 * A discord Guild you have administrative permissions on
 
+### Install From Source
+
+* Clone the source
+```git clone https://github.com/hypatia-software-org/CatPuppetBridge```
+* Check out the latest tag, or a release of your choice (eg v1.1.3)
+```git checkout latest```
+
+### Installing with a Virtual Environment
+
+* Install CatPuppetBridge with a Virtual Environment
+```sudo make install-venv```
+* Configure the bridge in `/etc/catbridge.ini` with the editor of your choice
+* Start the bridge
+```sudo systemctl start catpuppetbridge```
+
 ## Developing
 
 ### Prerequisites
