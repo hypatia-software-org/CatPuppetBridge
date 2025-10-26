@@ -21,12 +21,33 @@ import sys
 import os
 import asyncio
 from queue import Queue, Empty
-from unittest.mock import MagicMock, patch, AsyncMock
+from unittest.mock import MagicMock, patch, AsyncMock, Mock
 from irc import server
 import discord
 
 from modules.discord_bridge import DiscordBot
-
+def create_fake_message(
+        content = 'Hey whats up?',
+        bot = False,
+        display_name = 'someuserdisplay',
+        username = 'someusername',
+        guild_id = 12345,
+        message_reference_id = None):
+    message = MagicMock()
+    message.content = content
+    message.author = MagicMock()
+    message.author.bot = bot
+    message.author.display_name = display_name
+    message.author.name = username
+    message.channel = AsyncMock()
+    message.guild = Mock(spec=discord.Guild)
+    message.guild.id = guild_id
+    if message_reference_id:
+        message.reference = MagicMock()
+        message.reference_id = message_reference_id
+    else:
+        message.reference = None
+    return message
 
 def create_fake_user(
         id=12345,
@@ -313,14 +334,14 @@ async def test_dont_find_avatar(bot):
 @pytest.mark.asyncio
 async def test_covert_discord_time_default(bot):
     time = '<t:1761385165>'
-    human_time = bot.replace_time(time)
+    human_time = bot.filters.replace_time(time)
 
     assert human_time == 'October 25, 2025 at 09:39'
 
 @pytest.mark.asyncio
 async def test_covert_discord_time_default_with_text(bot):
     time = 'Lets meet at <t:1761385165> for the meeting!'
-    human_time = bot.replace_time(time)
+    human_time = bot.filters.replace_time(time)
 
     assert human_time == 'Lets meet at October 25, 2025 at 09:39 for the meeting!'
 
@@ -329,7 +350,7 @@ async def test_covert_discord_time_relative(bot):
     import time
     ts = int(time.time()) - 60*60*5
     time = f'<t:{ts}:R>'.format(ts)
-    human_time = bot.replace_time(time)
+    human_time = bot.filters.replace_time(time)
 
     assert human_time == '5 hours ago'
 
@@ -337,7 +358,7 @@ async def test_covert_discord_time_relative(bot):
 async def test_covert_discord_time_secs(bot):
     ts = '1761385165'
     time = f'<t:{ts}:T>'.format(ts)
-    human_time = bot.replace_time(time)
+    human_time = bot.filters.replace_time(time)
 
     assert human_time == '09:39:25'
 
@@ -345,6 +366,40 @@ async def test_covert_discord_time_secs(bot):
 async def test_covert_discord_time(bot):
     ts = '1761385165'
     time = f'<t:{ts}:t>'.format(ts)
-    human_time = bot.replace_time(time)
+    human_time = bot.filters.replace_time(time)
 
     assert human_time == '09:39'
+
+@pytest.mark.asyncio
+async def test_on_message(bot):
+    bot.ready = True
+    message = create_fake_message()
+    bot.discord_channel_mapping = {'123456': '#bots'}
+
+    await bot.on_message(message)
+
+    assert bot.queues['puppet_queue'].qsize() == 2
+    data = bot.queues['puppet_queue'].get(False)
+    assert data['command'] == 'active'
+
+    assert bot.queues['puppet_queue'].qsize() == 1
+    data = bot.queues['puppet_queue'].get(False)
+    assert data['command'] == 'send'
+    assert data['data'] == message.content
+
+@pytest.mark.asyncio
+async def test_on_message_with_time(bot):
+    bot.ready = True
+    message = create_fake_message(content = 'Hey lets meet at <t:1761385165:t>')
+    bot.discord_channel_mapping = {'123456': '#bots'}
+
+    await bot.on_message(message)
+
+    assert bot.queues['puppet_queue'].qsize() == 2
+    data = bot.queues['puppet_queue'].get(False)
+    assert data['command'] == 'active'
+
+    assert bot.queues['puppet_queue'].qsize() == 1
+    data = bot.queues['puppet_queue'].get(False)
+    assert data['command'] == 'send'
+    assert data['data'] == 'Hey lets meet at 09:39'

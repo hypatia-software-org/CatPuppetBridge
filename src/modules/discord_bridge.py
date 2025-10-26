@@ -25,7 +25,8 @@ import queue
 import asyncio
 import emoji
 import discord
-from datetime import datetime, timezone
+
+from modules.discord_filters import DiscordFilters
 
 
 class DiscordBot(discord.Client):
@@ -36,10 +37,10 @@ class DiscordBot(discord.Client):
     active_puppets = []
     mention_lookup = {}
     mention_lookup_re = None
-    discord_timeformat_re = re.compile(r"<t:(\d+)(?::([tTdDfFR]))?>")
     listener_config = None
     ready = False
     max_puppet_username = 30
+    filters = DiscordFilters()
 
     def __init__(self, queues, irc_to_discord_links, discord_config):
         intents = discord.Intents.default()
@@ -121,52 +122,6 @@ class DiscordBot(discord.Client):
             self.mention_lookup[irc_name + self.listener_config['puppet_suffix']] = user
         self.mention_lookup_re = re.compile(
             r'\b(' + '|'.join(map(re.escape, self.mention_lookup.keys())) + r')\b')
-
-    def format_relative_time(self, dt: datetime) -> str:
-        """ Convert time to 'relative' time eg/ 1 year ago, 5 days ago"""
-        now = datetime.now(timezone.utc)
-        diff = dt - now
-        seconds = int(diff.total_seconds())
-        past = seconds < 0
-        seconds = abs(seconds)
-        time_unit_map = [
-            ("year", 31536000),
-            ("month", 2592000),
-            ("day", 86400),
-            ("hour", 3600),
-            ("minute", 60),
-        ]
-
-        for unit, length in time_unit_map:
-            if seconds >= length:
-                value = seconds // length
-                s = "" if value == 1 else "s"
-                return f"{value} {unit}{s} ago" if past else f"in {value} {unit}{s}"
-
-        return f"{seconds} second{'s' if seconds != 1 else ''} ago" if past else f"in {seconds} seconds"
-
-    def replace_discord_timeformat(self, match):
-        """ Replace discord time formats eg/ <t:304343:F> with human readable time """
-        unix_time = int(match.group(1))
-        fmt = match.group(2) or "f"
-        diff = datetime.fromtimestamp(unix_time, tz=timezone.utc)
-
-        discord_time_format_map = {
-            "t": "%H:%M",
-            "T": "%H:%M:%S",
-            "d": "%m/%d/%Y",
-            "D": "%B %d, %Y",
-            "f": "%B %d, %Y at %H:%M",
-            "F": "%A, %B %d, %Y at %H:%M",
-        }
-
-        if fmt == "R":
-            return self.format_relative_time(diff)
-        else:
-            return diff.strftime(discord_time_format_map.get(fmt, "%Y-%m-%d %H:%M:%S UTC"))
-
-    def replace_time(self, msg: str):
-        return self.discord_timeformat_re.sub(self.replace_discord_timeformat, msg)
 
     async def on_member_update(self, before: discord.Member, after: discord.Member):
         """Run on updates to members, check for display_name and role changes"""
@@ -313,34 +268,6 @@ class DiscordBot(discord.Client):
                     return member.avatar.url
         return None
 
-    async def replace_customemotes(self, message):
-        """Replace custom emotes with :emote_id:"""
-        new_message = re.sub(r"<:([^:]+):\d+>", r":\1:", message)
-        return new_message
-
-    async def replace_channels(self, message):
-        """Replace channel names with plaintext"""
-        mention_pattern = r'<#!?(\d+)>'
-        new_message = ""
-        last_end = 0
-
-        for match in re.finditer(mention_pattern, message):
-            channel_id = int(match.group(1))
-            new_message += message[last_end:match.start()]
-            try:
-                channel = self.guilds[0].get_channel(channel_id) or \
-                    await self.guilds[0].fetch_channel(channel_id)
-                new_message += '#' + channel.name
-            except discord.NotFound as e:
-                logging.error('failed to find channel %i', channel_id)
-                logging.error(e)
-                new_message += match.group(0)  # fallback: keep original mention
-            last_end = match.end()
-
-        new_message += message[last_end:]  # append rest of string
-        return new_message
-
-
     async def replace_mentions(self, message):
         """Replace mentions with plaintext"""
         mention_pattern = r'<@!?(\d+)>'
@@ -410,9 +337,9 @@ class DiscordBot(discord.Client):
 
                     replied_to_content = replied_to.content[:50]
                     replied_to_content = await self.replace_mentions(replied_to_content)
-                    replied_to_content = await self.replace_customemotes(replied_to_content)
-                    replied_to_content = await self.replace_channels(replied_to_content)
-                    replied_to_content = await self.replace_time(replied_to_content)
+                    replied_to_content = await self.filters.replace_customemotes(replied_to_content)
+                    replied_to_content = await self.filters.replace_channels(replied_to_content)
+                    replied_to_content = self.filters.replace_time(replied_to_content)
 
                     template = 'replied to {author} "{message}...": {content}'
                     content = template.format(author=reply_author,
@@ -422,9 +349,9 @@ class DiscordBot(discord.Client):
                     logging.info("Reply not found to message %s", message.content)
 
             content = await self.replace_mentions(content)
-            content = await self.replace_customemotes(content)
-            content = await self.replace_channels(content)
-            content = await self.replace_time(replied_to_content)
+            content = await self.filters.replace_customemotes(content)
+            content = await self.filters.replace_channels(content)
+            content = self.filters.replace_time(content)
 
         return content, attach
 
