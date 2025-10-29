@@ -214,7 +214,7 @@ class DiscordBot(discord.Client):
 
                     # detect mentions
                     processed_message = msg['content']
-                    if self.mention_lookup_re:
+                    if self.filters.mention_lookup_re:
                         processed_message = self.filters.lookup_mention(msg['content'])
                     # Detect Avatar
                     avatar = await self.find_avatar(msg['author'])
