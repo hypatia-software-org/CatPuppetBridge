@@ -26,6 +26,11 @@ from irc import server
 import discord
 
 from modules.discord_bridge import DiscordBot
+from modules.discord_filters import DiscordFilters
+
+
+users = []
+
 def create_fake_message(
         content = 'Hey whats up?',
         bot = False,
@@ -49,13 +54,25 @@ def create_fake_message(
         message.reference = None
     return message
 
+def get_user(user_id):
+    ret_val = None
+    print('-----')
+    print(user_id)
+    for user in users:
+        print(user.id)
+        if user_id == user.id:
+            ret_val = user
+            break
+    print('-----')
+    return ret_val
+
 def create_fake_user(
         id=12345,
         name="TestUser",
         discriminator="0001",
         display_name=None,
         bot=False,
-        avatar_url="https://example.invalid/avatar.png",
+        avatar_url="https://example.com/invalid/avatar.png",
         status=discord.Status.online
 ):
     u = MagicMock()
@@ -64,8 +81,8 @@ def create_fake_user(
     u.discriminator = discriminator
     u.display_name = display_name or name
     u.bot = bot
-    u.mention = f"<@{id}>"
-    # emulate str(user) -> "name#discriminator"
+    u.mention = f"<@{id}>".format(id)
+
     u.__str__.return_value = f"{name}#{discriminator}"
 
     u.send = AsyncMock()
@@ -74,6 +91,7 @@ def create_fake_user(
     display_avatar.url = avatar_url
     u.avatar = display_avatar
     u.status = status
+    users.append(u)
     return u
 
 def reset_bot(bot):
@@ -83,12 +101,14 @@ def reset_bot(bot):
 @pytest.fixture
 def bot():
     real = DiscordBot.__new__(DiscordBot);
-    real._connection = AsyncMock()
+    real._connection = MagicMock()
     real.http = None
     real.irc_to_discord_links = {'#test1': '1', "#test2": '2', "#bots": '3','#new_channel': '4'}
     real.channel = AsyncMock()
     real.message = AsyncMock()
     real.loop = AsyncMock()
+    real.get_user = get_user
+    real.fetch_user = get_user
 
     real.listener_config = {}
     real.listener_config['puppet_suffix'] = '_d2'
@@ -96,9 +116,11 @@ def bot():
     real.queues = {}
     real.queues['puppet_queue'] = Queue()
     real.queues['in_queue'] = Queue()
+    real.get_user = get_user
 
     real.guilds[0].chunk = AsyncMock()
     real.guilds[0].members = [create_fake_user()]
+    real.filters = DiscordFilters(real)
 
     channel = AsyncMock()
     message = AsyncMock()
@@ -319,11 +341,12 @@ async def test_on_member_remove(bot):
     data = bot.queues['puppet_queue'].get(False)
     assert data['command'] == 'die'
 
+@pytest.mark.filterwarnings("ignore:coroutine 'AsyncMockMixin._execute_mock_call' was never awaited:RuntimeWarning")
 @pytest.mark.asyncio
 async def test_find_avatar(bot):
     user = create_fake_user()
     avatar = await bot.find_avatar(user.display_name)
-    assert avatar == 'https://example.invalid/avatar.png'
+    assert avatar == 'https://example.com/invalid/avatar.png'
 
 @pytest.mark.asyncio
 async def test_dont_find_avatar(bot):
@@ -403,3 +426,40 @@ async def test_on_message_with_time(bot):
     data = bot.queues['puppet_queue'].get(False)
     assert data['command'] == 'send'
     assert data['data'] == 'Hey lets meet at 09:39'
+
+@pytest.mark.asyncio
+async def test_mention_compile_new(bot):
+    user = create_fake_user()
+
+    lookup_size = len(bot.filters.mention_lookup)
+    await bot.filters.compile_mention_lookup_re(user)
+
+    assert len(bot.filters.mention_lookup) == lookup_size + 1
+
+@pytest.mark.asyncio
+async def test_mention_compile_and_lookup(bot):
+    user = create_fake_user(name='bob', display_name='jim', id=1234567890)
+    lookup_size = len(bot.filters.mention_lookup)
+    await bot.filters.compile_mention_lookup_re(user)
+    content = bot.filters.lookup_mention('hey jim[bob]_d2 what is up?')
+
+    assert content == 'hey <@1234567890> what is up?'
+
+@pytest.mark.asyncio
+async def test_mention_replace_to_irc(bot):
+    message = create_fake_message(content = 'hey <@1234567890> what is up?')
+    user = create_fake_user(name='bob', display_name='jim', id=1234567890)
+
+    content = await bot.filters.replace_mentions(message.content)
+
+    assert content == 'hey jim[bob]_d2 what is up?'
+
+@pytest.mark.asyncio
+async def test_mention_remove(bot):
+    lookup_size = len(bot.filters.mention_lookup)
+    await bot.filters.remove_from_mention_lookup('jim[bob]_d2')
+    msg = 'hey jim[bob]_d2 what is up?'
+    content = bot.filters.lookup_mention(msg)
+
+    assert len(bot.filters.mention_lookup) == lookup_size - 1
+    assert content == msg

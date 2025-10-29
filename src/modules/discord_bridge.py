@@ -35,12 +35,10 @@ class DiscordBot(discord.Client):
     irc_to_discord_links = None
     discord_channel_mapping = None
     active_puppets = []
-    mention_lookup = {}
-    mention_lookup_re = None
     listener_config = None
     ready = False
     max_puppet_username = 30
-    filters = DiscordFilters()
+    filters = None
 
     def __init__(self, queues, irc_to_discord_links, discord_config):
         intents = discord.Intents.default()
@@ -48,6 +46,8 @@ class DiscordBot(discord.Client):
         intents.members = True
         intents.guilds = True
         intents.presences = True
+
+        self.filters = DiscordFilters(self)
 
         self.queues = queues
         self.irc_to_discord_links = irc_to_discord_links
@@ -112,16 +112,8 @@ class DiscordBot(discord.Client):
 
         self.active_puppets.append(user.id)
 
-        await self.compile_mention_lookup_re(user)
+        await self.filters.compile_mention_lookup_re(user)
         logging.info("%s is now active! (status: %s)", user.display_name, user.status)
-
-    async def compile_mention_lookup_re(self, user: discord.Member = None):
-        """Compile our regex for looking up mentions"""
-        if user:
-            irc_name = await self.generate_irc_nickname(user)
-            self.mention_lookup[irc_name + self.listener_config['puppet_suffix']] = user
-        self.mention_lookup_re = re.compile(
-            r'\b(' + '|'.join(map(re.escape, self.mention_lookup.keys())) + r')\b')
 
     async def on_member_update(self, before: discord.Member, after: discord.Member):
         """Run on updates to members, check for display_name and role changes"""
@@ -129,7 +121,7 @@ class DiscordBot(discord.Client):
         if before.display_name != after.display_name:
             self.active_puppets.remove(before.id)
             self.active_puppets.append(after.id)
-            await self.compile_mention_lookup_re(after)
+            await self.filters.compile_mention_lookup_re(after)
             await self.send_irc_command(after, 'nick', None)
             logging.info("%s changed display name from"
                          "'%s' to '%s'",
@@ -186,8 +178,8 @@ class DiscordBot(discord.Client):
             self.active_puppets.remove(member.id)
             irc_nick = await self.generate_irc_nickname(member)
             try:
-                del self.mention_lookup[irc_nick + self.listener_config['puppet_suffix']]
-                await self.compile_mention_lookup_re()
+                await self.filters.remove_from_mention_lookup(
+                    irc_nick + self.listener_config['puppet_suffix'])
             except KeyError:
                 logging.warning("Could not remove %s from mention_lookup table",
                                 member.display_name)
@@ -223,9 +215,7 @@ class DiscordBot(discord.Client):
                     # detect mentions
                     processed_message = msg['content']
                     if self.mention_lookup_re:
-                        processed_message = self.mention_lookup_re.sub(
-                            lambda match: self.mention_lookup[match.group(0)].mention,
-                            msg['content'])
+                        processed_message = self.filters.lookup_mention(msg['content'])
                     # Detect Avatar
                     avatar = await self.find_avatar(msg['author'])
                     if avatar is None:
@@ -267,28 +257,6 @@ class DiscordBot(discord.Client):
                 if member.avatar:
                     return member.avatar.url
         return None
-
-    async def replace_mentions(self, message):
-        """Replace mentions with plaintext"""
-        mention_pattern = r'<@!?(\d+)>'
-        new_message = ""
-        last_end = 0
-
-        for match in re.finditer(mention_pattern, message):
-            user_id = int(match.group(1))
-            new_message += message[last_end:match.start()]
-            try:
-                user = self.get_user(user_id) or await self.fetch_user(user_id)
-                irc_nick = await self.generate_irc_nickname(user)
-                new_message += irc_nick + self.listener_config['puppet_suffix']
-            except discord.NotFound as e:
-                logging.error('failed to find user %i', user_id)
-                logging.error(e)
-                new_message += match.group(0)  # fallback: keep original mention
-            last_end = match.end()
-
-        new_message += message[last_end:]  # append rest of string
-        return new_message
 
     async def accessible_channels(self, user_id: int):
         """Find out what channels a puppet can see"""
@@ -336,7 +304,7 @@ class DiscordBot(discord.Client):
                         reply_author = await self.generate_irc_nickname(replied_to.author)
 
                     replied_to_content = replied_to.content[:50]
-                    replied_to_content = await self.replace_mentions(replied_to_content)
+                    replied_to_content = await self.filters.replace_mentions(replied_to_content)
                     replied_to_content = await self.filters.replace_customemotes(replied_to_content)
                     replied_to_content = await self.filters.replace_channels(replied_to_content)
                     replied_to_content = self.filters.replace_time(replied_to_content)
@@ -348,7 +316,7 @@ class DiscordBot(discord.Client):
                 except discord.NotFound:
                     logging.info("Reply not found to message %s", message.content)
 
-            content = await self.replace_mentions(content)
+            content = await self.filters.replace_mentions(content)
             content = await self.filters.replace_customemotes(content)
             content = await self.filters.replace_channels(content)
             content = self.filters.replace_time(content)
