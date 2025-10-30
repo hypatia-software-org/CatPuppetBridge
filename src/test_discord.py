@@ -428,6 +428,26 @@ async def test_on_message_with_time(bot):
     assert data['data'] == 'Hey lets meet at 09:39'
 
 @pytest.mark.asyncio
+async def test_custom_emote(bot):
+    bot.ready = True
+    message = create_fake_message(content = 'LOL <:meow:13240932840>')
+    bot.discord_channel_mapping = {'123456': '#bots'}
+
+    data = await bot.filters.replace_customemotes(message.content)
+
+    assert data == 'LOL :meow:'
+
+@pytest.mark.asyncio
+async def test_custom_emote_special(bot):
+    bot.ready = True
+    message = create_fake_message(content = 'LOL <a:meow:13240932840>')
+    bot.discord_channel_mapping = {'123456': '#bots'}
+
+    data = await bot.filters.replace_customemotes(message.content)
+
+    assert data == 'LOL :meow:'
+
+@pytest.mark.asyncio
 async def test_mention_compile_new(bot):
     user = create_fake_user()
 
