@@ -382,9 +382,15 @@ class IRCBot(BotTemplate):
 
         if cmd == "stats":
             data = self.stats_data.snapshot()
-            total_puppets = data['total_puppets']
-            discord_messages = data['discord_messages']
-            irc_messages = data['irc_messages']
+            total_puppets = 0
+            if 'total_puppets' in data:
+                total_puppets = data['total_puppets']
+            discord_messages = 0
+            if 'discord_messages' in data:
+                discord_messages = data['discord_messages']
+            irc_messages = 0
+            if 'irc_messages' in data:
+                irc_messages = data['irc_messages']
             p = psutil.Process(os.getpid())
             rss = p.memory_info().rss / 1024**2
             uptime = self.format_uptime(data['uptime'])
