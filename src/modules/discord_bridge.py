@@ -52,12 +52,14 @@ class DiscordBot(discord.Client):
         self.queues = queues
         self.irc_to_discord_links = irc_to_discord_links
         self.listener_config = discord_config
+        logging.getLogger('discord.gateway').setLevel(discord_config['log_level'])
+        logging.getLogger('discord.client').setLevel(discord_config['log_level'])
 
         super().__init__(intents=intents, chunk_guilds_at_startup=True)
 
     async def on_ready(self):
         """Init discord bot when ready, set the self.ready value"""
-        logging.info('We have logged in as %s', self.user)
+        logging.debug('We have logged in as %s', self.user)
         self.discord_channel_mapping = {}
         for channel in self.irc_to_discord_links:
             self.discord_channel_mapping[channel] = self.get_channel(
@@ -106,14 +108,14 @@ class DiscordBot(discord.Client):
     async def activate_puppet(self, user):
         """Push to the puppet queue to activate an irc puppet"""
         if not self.ready:
-            logging.info("Discord not ready yet")
+            logging.debug("Discord not ready yet")
         channels =  await self.accessible_channels(user.id)
         await self.send_irc_command(user, 'active', channels)
 
         self.active_puppets.append(user.id)
 
         await self.filters.compile_mention_lookup_re(user)
-        logging.info("%s is now active! (status: %s)", user.display_name, user.status)
+        logging.debug("%s is now active! (status: %s)", user.display_name, user.status)
 
     async def on_member_update(self, before: discord.Member, after: discord.Member):
         """Run on updates to members, check for display_name and role changes"""
@@ -123,7 +125,7 @@ class DiscordBot(discord.Client):
             self.active_puppets.append(after.id)
             await self.filters.compile_mention_lookup_re(after)
             await self.send_irc_command(after, 'nick', None)
-            logging.info("%s changed display name from"
+            logging.debug("%s changed display name from"
                          "'%s' to '%s'",
                          before.name, before.display_name, after.display_name)
 
@@ -154,11 +156,11 @@ class DiscordBot(discord.Client):
         if previously_active and now_inactive:
             if after.id in self.active_puppets:
                 await self.send_irc_command(after, 'afk')
-                logging.info("%s is now offline! (status: %s)", after.display_name, after.status)
+                logging.debug("%s is now offline! (status: %s)", after.display_name, after.status)
 
     async def send_irc_command(self, user, command, data=None, channel=None):
         """Send a command to an IRC Puppet"""
-        logging.info('adding cmd to queue from discord: %s',command)
+        logging.debug('adding cmd to queue from discord: %s',command)
         self.queues['puppet_queue'].put({
             'nick': self.irc_safe_nickname(user.display_name),
             'display_name': user.display_name,
@@ -185,7 +187,7 @@ class DiscordBot(discord.Client):
                                 member.display_name)
 
             await self.send_irc_command(member, 'die')
-            logging.info("%s has left!", member.display_name)
+            logging.debug("%s has left!", member.display_name)
 
     async def process_queue(self):
         """Thread to process our incoming queue from IRC"""
@@ -314,7 +316,7 @@ class DiscordBot(discord.Client):
                                               message=replied_to_content,
                                               content=content)
                 except discord.NotFound:
-                    logging.info("Reply not found to message %s", message.content)
+                    logging.debug("Reply not found to message %s", message.content)
 
             content = await self.filters.replace_mentions(content)
             content = await self.filters.replace_customemotes(content)

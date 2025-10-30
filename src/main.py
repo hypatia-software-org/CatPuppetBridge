@@ -61,7 +61,7 @@ def init_config(config_filename='catbridge.ini'):
     elif os.path.isfile('/etc/' + config_filename):
         config_path = '/etc/' + config_filename
     else:
-        logging.error("Error: catbridge.ini missing.")
+        logging.error("catbridge.ini missing")
         sys.exit(1)
 
     config = configparser.ConfigParser()
@@ -76,27 +76,30 @@ def check_required(required: list, config: dict, block: str):
     """Ensure required fields exist"""
     for req in required:
         if req not in config:
-            logging.error("Error: Required config in `%s` block `%s` is missing", block, req)
+            logging.error("required config in `%s` block `%s` is missing", block, req)
             sys.exit(1)
 
 def read_config(irc_required: list, discord_required: list, config, config_path: str):
     """Read the config file"""
+
+    logging.info("opening configuration file `%s`", config_path)
+
     if 'IRC' not in config:
-        logging.error("Error: IRC block missing in `%s`", config_path)
+        logging.error("IRC block missing in `%s`", config_path)
         sys.exit(1)
 
     irc_config = config['IRC']
     check_required(irc_required, irc_config, 'IRC')
 
     if 'Discord' not in config:
-        logging.error("Error: Discord block missing in %s", config_path)
+        logging.error("Discord block missing in %s", config_path)
         sys.exit(1)
 
     discord_config = config['Discord']
     check_required(discord_required, discord_config, 'Discord')
 
     if 'Links' not in config:
-        logging.error("Error: Links block missing in %s", config_path)
+        logging.error("Links block missing in %s", config_path)
         sys.exit(1)
 
     channels_to_join = []
@@ -108,12 +111,21 @@ def read_config(irc_required: list, discord_required: list, config, config_path:
         discord_to_irc_links[entry] = config['Links'][entry]
         irc_to_discord_links[config['Links'][entry]] = entry
 
+    global_config = {}
+    if 'Global' not in config:
+        logging.warning("Global block missing in %s", config_path)
+    else:
+        for entry in config['Global']:
+            global_config[entry] = config['Global'][entry]
+    if 'log_level' not in global_config:
+        global_config['log_level'] = 'warn'
 
     return {'irc_config': irc_config,
             'discord_config': discord_config,
             'irc_to_discord_links': irc_to_discord_links,
             'discord_to_irc_links': discord_to_irc_links,
-            'channels_to_join': channels_to_join}
+            'channels_to_join': channels_to_join,
+            'global_config': global_config}
 
 def main():
     """Main loop for Cat Puppet Bridge"""
@@ -139,8 +151,21 @@ def main():
                           config,
                           config_path)
 
+    match configs['global_config']['log_level']:
+        case "warn":
+            log_level = logging.WARNING
+        case "info":
+            log_level = logging.INFO
+        case "error":
+            log_level = logging.ERROR
+        case "debug":
+            log_level = logging.DEBUG
+
+    logging.getLogger().setLevel(log_level)
+
     discord_config = {'puppet_suffix': configs['irc_config']['PuppetSuffix'],
-                      'puppet_min_size': int(configs['irc_config']['PuppetDisplayNameMinSize'])}
+                      'puppet_min_size': int(configs['irc_config']['PuppetDisplayNameMinSize']),
+                      'log_level': log_level}
     irc_config = {
         'puppet_suffix': configs['irc_config']['PuppetSuffix'],
         'tls': configs['irc_config']['TLS'],
@@ -161,6 +186,7 @@ def main():
 
     threads = []
 
+    logging.info("starting discord thread")
     threads.append(threading.Thread(target=run_discord,
                                     args=[configs['discord_config']['Token'],
                                           discord_queues,
@@ -168,9 +194,11 @@ def main():
                                           discord_config],
                                     daemon=True).start())
 
+    logging.info("starting IRC bot thread")
     threads.append(threading.Thread(target=run_ircbot,
                                     args=[irc_config], daemon=True).start())
 
+    logging.info("starting IRC listener thread")
     threads.append(threading.Thread(target=run_irclistener,
                                     args=[discord_queues['irc_to_discord_queue'],
                                           irc_config], daemon=True).start())
@@ -182,7 +210,8 @@ def main():
         if user['command'] == 'active':
             # Does the puppet already exist? Start it! Otherwise do nothing
             if user['id'] not in puppet_dict:
-                logging.info("Starting IRC Puppet: %s", user['irc_nick'])
+                logging.debug("Starting IRC Puppet: %s", user['irc_nick'])
+                logging.info("starting IRC Puppet")
                 puppet_main_queues[user['id']] = Queue()
                 puppet_nickname = user['irc_nick'] + configs['irc_config']['PuppetSuffix']
                 puppet_config = {
@@ -202,7 +231,8 @@ def main():
 
                 puppet_dict[user['id']] = ircpuppet_thread
         if user['command'] == 'die':
-            logging.info("Stopping IRC Puppet: %s", user['irc_nick'])
+            logging.debug("stopping IRC Puppet: %s", user['irc_nick'])
+            logging.info("stopping IRC Puppet")
             puppet_main_queues[user['id']].put(user)
             puppet_dict[user['id']].join()
             del puppet_dict[user['id']]
