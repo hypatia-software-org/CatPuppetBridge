@@ -35,6 +35,8 @@ class BotTemplate(irc.client.SimpleIRCClient):
     """ Shared IRC Bot functionality """
     log = None
     reconnect_data = None
+    ready = False
+
     def __init__(self):
         super().__init__()
         self.log = logging.getLogger(self.__class__.__name__)
@@ -44,6 +46,7 @@ class BotTemplate(irc.client.SimpleIRCClient):
         retry_count = 1
         self.reconnect_data = {'server': server, 'port': port, 'nickname': nickname, 'tls': tls}
         while True:
+            self.ready = False
             if tls == "yes":
                 context = ssl.create_default_context(ssl.Purpose.SERVER_AUTH)
                 context.check_hostname = False
@@ -100,7 +103,6 @@ class IRCPuppet(BotTemplate):
     connection = None
     end_thread = False
     queue_thread = None
-    ready = False
 
     def __init__(self, queues, discord_to_irc_links, puppet_config,
                  config):
@@ -141,10 +143,12 @@ class IRCPuppet(BotTemplate):
 
     def process_discord_queue(self):
         """Main worker thread for handling commands form discord"""
-        while not self.ready:
-            time.sleep(1)
         sentinel = object()
         for msg in iter(self.queues['in_queue'].get, sentinel):
+            while not self.ready:
+                time.sleep(1)
+
+            self.log.debug("Processing command %s", msg)
             if msg['command'] == 'send':
                 if msg['data'] is None:
                     continue
@@ -189,8 +193,10 @@ class IRCPuppet(BotTemplate):
             self.log.debug("Puppet Joining %s", self.discord_to_irc_links[str(channel)])
             c.join(self.discord_to_irc_links[str(channel)])
         #self.reactor.scheduler.execute_every(1, self.process_discord_queue)
-        self.queue_thread = threading.Thread(target=self.process_discord_queue, daemon=True)
-        self.queue_thread.start()
+        if not self.queue_thread:
+            self.log.debug("starting process_discord_queue thread from puppet")
+            self.queue_thread = threading.Thread(target=self.process_discord_queue, daemon=True)
+            self.queue_thread.start()
         c.mode(c.get_nickname(), "+R")
         self.ready = True
 
