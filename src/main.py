@@ -119,7 +119,7 @@ def read_config(irc_required: list, discord_required: list, config, config_path:
         for entry in config['Global']:
             global_config[entry] = config['Global'][entry]
     if 'log_level' not in global_config:
-        global_config['log_level'] = 'warn'
+        global_config['log_level'] = 'info'
 
     return {'irc_config': irc_config,
             'discord_config': discord_config,
