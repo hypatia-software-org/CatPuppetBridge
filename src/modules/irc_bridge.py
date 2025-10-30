@@ -24,8 +24,11 @@ import threading
 import logging
 import time
 import re
+import os
 import ssl
+from datetime import timedelta
 
+import psutil
 import irc.bot
 import irc.client
 import irc.strings
@@ -263,10 +266,11 @@ class IRCListener(BotTemplate):
     config = None
     channels = None
 
-    def __init__(self, out_queue, config):
+    def __init__(self, out_queue, config, data):
         super().__init__()
         self.reactor = irc.client.Reactor()
         self.config = config
+        self.data = data
         # TODO: ircname
         self.connect_and_retry(self.config['server'], self.config['port'],
                                self.config['listener_nickname'],
@@ -311,6 +315,7 @@ class IRCListener(BotTemplate):
                 'content': event.arguments[0]
             }
             self.out_queue.put(data)
+            self.data.increment('irc_messages')
 
     def start(self):
         """Start the irc loop, forever"""
@@ -321,13 +326,18 @@ class IRCBot(BotTemplate):
     """Generic bot for running admin commands on the bridge from IRC"""
 
     channels = None
+    stats_data = None
 
-    def __init__(self, config):
+    def __init__(self, config, data):
         super().__init__()
         self.reactor = irc.client.Reactor()
         self.connect_and_retry(config['server'], config['port'], config['bot_nickname'],
                                config['tls'])
         self.channel = config['bot_channel']
+        self.stats_data = data
+        self.connection.add_global_handler("welcome", self.on_welcome)
+        self.connection.add_global_handler("pubmsg", self.on_pubmsg)
+        self.connection.add_global_handler("privmsg", self.on_privmsg)
 
     def on_nicknameinuse(self, c, e):
         """Run if nickname is already in use"""
@@ -354,12 +364,31 @@ class IRCBot(BotTemplate):
         ):
             self.do_command(e, a[1].strip())
 
+    def format_uptime(self, start_time):
+        """ Create a human readable different in time, from unix time """
+        elapsed = time.time() - start_time
+        return str(timedelta(seconds=int(elapsed)))
+
     def do_command(self, e, cmd):
         """Process commands"""
         nick = e.source.nick
         c = self.connection
 
         if cmd == "stats":
-            c.notice(nick, "Stats placeholder")
+            data = self.stats_data.snapshot()
+            total_puppets = data['total_puppets']
+            discord_messages = data['discord_messages']
+            irc_messages = data['irc_messages']
+            p = psutil.Process(os.getpid())
+            rss = p.memory_info().rss / 1024**2
+            uptime = self.format_uptime(data['uptime'])
+            num_threads = psutil.Process().num_threads()
+
+            c.privmsg(nick, "Puppets total: " + str(total_puppets))
+            c.privmsg(nick, "Relayed messages from Discord: " + str(discord_messages))
+            c.privmsg(nick, "Relayed messages from IRC: " + str(irc_messages))
+            c.privmsg(nick, f"Memory usage (rss): {rss:.2f}mb".format(rss))
+            c.privmsg(nick, "Threads: " + str(num_threads))
+            c.privmsg(nick, "Uptime: " + uptime)
         else:
-            c.notice(nick, "Not understood: " + cmd)
+            c.privmsg(nick, "Not understood: " + cmd)

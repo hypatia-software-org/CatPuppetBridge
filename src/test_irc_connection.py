@@ -23,6 +23,7 @@ import signal
 import main
 import ssl
 import socket
+from modules.stats_data import StatsData
 from irc import client
 
 from modules.irc_bridge import IRCBot, IRCListener, IRCPuppet
@@ -184,24 +185,26 @@ def irc_config_ssl():
     }
 
 def test_irc_server_connection_plain(discord_queues, irc_config, irc_server):
+    data = StatsData()
     thread = threading.Thread(target=main.run_irclistener,
                               args=[discord_queues['irc_to_discord_queue'],
-                                    irc_config], daemon=True).start()
+                                    irc_config, data], daemon=True).start()
     output = irc_server.stdout.readline().strip()
     assert "Client connected" in output
     
 def test_irc_server_connection_ssl(discord_queues, irc_config_ssl, irc_server, ssl_proxy):
+    data = StatsData()
     thread = threading.Thread(target=main.run_irclistener,
                               args=[discord_queues['irc_to_discord_queue'],
-                                    irc_config_ssl], daemon=True).start()
+                                    irc_config_ssl, data], daemon=True).start()
     output = irc_server.stdout.readline().strip()
     assert "Client connected" in output
     
 def test_irc_listener_recived_message(discord_queues, irc_config):
-    
+    data = StatsData()
     thread = threading.Thread(target=main.run_irclistener,
                               args=[discord_queues['irc_to_discord_queue'],
-                                    irc_config], daemon=True).start()
+                                    irc_config, data], daemon=True).start()
     try:
         say_hi_and_quit()
     except SystemExit:

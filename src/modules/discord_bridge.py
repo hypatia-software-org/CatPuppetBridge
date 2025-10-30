@@ -40,13 +40,14 @@ class DiscordBot(discord.Client):
     max_puppet_username = 30
     filters = None
 
-    def __init__(self, queues, irc_to_discord_links, discord_config):
+    def __init__(self, queues, irc_to_discord_links, discord_config, data):
         intents = discord.Intents.default()
         intents.message_content = True
         intents.members = True
         intents.guilds = True
         intents.presences = True
 
+        self.data = data
         self.filters = DiscordFilters(self)
 
         self.queues = queues
@@ -172,6 +173,8 @@ class DiscordBot(discord.Client):
             'data': data,
             'timestamp': time.time()
         })
+        if command == 'send':
+            self.data.increment('discord_messages')
 
     async def on_member_remove(self, member):
         """Run when member is removed or leaves guild"""

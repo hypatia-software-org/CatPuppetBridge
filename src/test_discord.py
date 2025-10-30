@@ -27,6 +27,7 @@ import discord
 
 from modules.discord_bridge import DiscordBot
 from modules.discord_filters import DiscordFilters
+from modules.stats_data import StatsData
 
 
 users = []
@@ -109,6 +110,7 @@ def bot():
     real.loop = AsyncMock()
     real.get_user = get_user
     real.fetch_user = get_user
+    real.data = StatsData()
 
     real.listener_config = {}
     real.listener_config['puppet_suffix'] = '_d2'
