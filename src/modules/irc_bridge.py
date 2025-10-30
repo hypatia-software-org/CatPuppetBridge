@@ -99,7 +99,7 @@ class IRCPuppet(irc.client.SimpleIRCClient):
             if msg['command'] == 'send':
                 if msg['data'] is None:
                     continue
-                logging.info("Found send, sending from puppet %s", self.config['nickname'])
+                logging.debug("Found send, sending from puppet %s", self.config['nickname'])
                 messages = self.split_irc_message(msg)
                 for message in messages:
                     if str(msg['channel']) in self.discord_to_irc_links.keys():
@@ -124,11 +124,11 @@ class IRCPuppet(irc.client.SimpleIRCClient):
         """Manage part and join commands from discord"""
         for channel in channels:
             if channel not in self.channels:
-                logging.info("Puppet Joining %s", self.discord_to_irc_links[str(channel)])
+                logging.debug("Puppet Joining %s", self.discord_to_irc_links[str(channel)])
                 self.connection.join(self.discord_to_irc_links[str(channel)])
         for channel in self.channels:
             if channel not in channels:
-                logging.info("Puppet Parting %s", self.discord_to_irc_links[str(channel)])
+                logging.debug("Puppet Parting %s", self.discord_to_irc_links[str(channel)])
                 self.connection.part(self.discord_to_irc_links[str(channel)])
         self.channels = channels
 
@@ -137,7 +137,7 @@ class IRCPuppet(irc.client.SimpleIRCClient):
         logging.debug("event %s", e)
 
         for channel in self.channels:
-            logging.info("Puppet Joining %s", self.discord_to_irc_links[str(channel)])
+            logging.debug("Puppet Joining %s", self.discord_to_irc_links[str(channel)])
             c.join(self.discord_to_irc_links[str(channel)])
         #self.reactor.scheduler.execute_every(1, self.process_discord_queue)
         self.queue_thread = threading.Thread(target=self.process_discord_queue, daemon=True)
@@ -183,10 +183,10 @@ class IRCPuppet(irc.client.SimpleIRCClient):
 
     def start(self):
         """Start the IRC Puppet loop"""
-        logging.info("Starting IRC puppet loop for puppet %s", self.config['nickname'])
+        logging.debug("Starting IRC puppet loop for puppet %s", self.config['nickname'])
         while not self.end_thread:
             self.reactor.process_once(timeout=0.2)
-        logging.info('IRC Puppet killing main thread, %s', self.config['nickname'])
+        logging.debug('IRC Puppet killing main thread, %s', self.config['nickname'])
         sys.exit(0)
         #self.reactor.process_forever()
 
@@ -204,7 +204,7 @@ class IRCPuppet(irc.client.SimpleIRCClient):
 
     def die(self, msg):
         """Kill ourself"""
-        logging.info('IRC Puppet dying, %s', self.config['nickname'])
+        logging.debug('IRC Puppet dying, %s', self.config['nickname'])
         self.connection.disconnect(msg)
         sys.exit(0)
 
@@ -245,13 +245,13 @@ class IRCListener(irc.client.SimpleIRCClient):
     def on_welcome(self, c, e):
         """On IRCd welcome, join channels"""
         for channel in self.channels:
-            logging.info("Listener joining %s", channel)
+            logging.debug("Listener joining %s", channel)
             logging.debug("event %s", e)
             c.join(channel)
 
     def on_action(self, c, event):
         """Relay /me aka IRC actions"""
-        logging.info("Irc action found, adding to queue")
+        logging.debug("Irc action found, adding to queue")
         logging.debug("conext %s", c)
         logging.debug("event %s", event)
         nickname = event.source.split('!', 1)[0]
@@ -267,7 +267,7 @@ class IRCListener(irc.client.SimpleIRCClient):
         logging.debug("c %s", c)
         nickname = event.source.split('!', 1)[0]
         if not nickname.endswith(self.config['puppet_suffix']):
-            logging.info("Irc message found, adding to queue")
+            logging.debug("Irc message found, adding to queue")
             data = {
                 'author': nickname,
                 'channel': event.target,
@@ -277,7 +277,7 @@ class IRCListener(irc.client.SimpleIRCClient):
 
     def start(self):
         """Start the irc loop, forever"""
-        logging.info("Starting IRC client loop...")
+        logging.debug("Starting IRC client loop...")
         self.reactor.process_forever()
 
 class IRCBot(irc.bot.SingleServerIRCBot):
