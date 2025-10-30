@@ -238,7 +238,6 @@ class DiscordBot(discord.Client):
                 pass
             await asyncio.sleep(0.01)
 
-<<<<<<< HEAD:modules/discord_bridge.py
     async def process_dm_queue(self):
         """Thread to process our incoming dm_queue from IRC private messages"""
         while True:
@@ -270,7 +269,7 @@ class DiscordBot(discord.Client):
             except queue.Empty:
                 pass
             await asyncio.sleep(0.01)
-=======
+
     async def replace_emojis(self, processed_message):
         """ Replace strings like :heart: with their unicode emoji, or discord custom emoji """
         def replace(match):
@@ -286,7 +285,6 @@ class DiscordBot(discord.Client):
             return f":{found_emoji}:"
 
         return re.sub(r":([a-zA-Z0-9_]+):", replace, processed_message)
->>>>>>> e8ef916410f59d2d82fc47eb95fbd06d0b011526:src/modules/discord_bridge.py
 
     async def find_avatar(self, user):
         """Find an avatar if user exists on irc and discord"""
