@@ -24,28 +24,30 @@ import sys
 import os.path
 import threading
 import logging
+import time
 from queue import Queue
 
 from modules.irc_bridge import IRCBot, IRCListener, IRCPuppet
 from modules.discord_bridge import DiscordBot
 from modules.address_generator import ula_address_from_string
+from modules.stats_data import StatsData
 
-def run_discord(discord_token, queues, irc_to_discord_links, listener_config):
+def run_discord(discord_token, queues, irc_to_discord_links, listener_config, data):
     """Start the discord thread and login to the Discord API"""
     # Start Discord Bot
-    discordbot = DiscordBot(queues, irc_to_discord_links, listener_config)
+    discordbot = DiscordBot(queues, irc_to_discord_links, listener_config, data)
     discordbot.run(discord_token)
 
-def run_ircbot(config):
+def run_ircbot(config, data):
     """Start the IRCBOT thread"""
     # Start IRC Bot
-    ircbot = IRCBot(config)
+    ircbot = IRCBot(config, data)
     ircbot.start()
 
-def run_irclistener(out_queue, config):
+def run_irclistener(out_queue, config, data):
     """Start the IRC Listener thread"""
     # Start IRC Listenr
-    ircbot = IRCListener(out_queue, config)
+    ircbot = IRCListener(out_queue, config, data)
     ircbot.start()
 
 def run_ircpuppet(queues, discord_to_irc_links, puppet_config, config):
@@ -128,15 +130,32 @@ def read_config(irc_required: list, discord_required: list, config, config_path:
             'channels_to_join': channels_to_join,
             'global_config': global_config}
 
+def get_log_level(log_level_str):
+    """ Helper to translate log_level string to logging level type """
+    match log_level_str:
+        case "warn":
+            log_level = logging.WARNING
+        case "info":
+            log_level = logging.INFO
+        case "error":
+            log_level = logging.ERROR
+        case "debug":
+            log_level = logging.DEBUG
+        case _:
+            log_level = logging.INFO
+    return log_level
+
+def set_log_level(log_level_str):
+    """ Helper to set log level from given string """
+    logging.getLogger().setLevel(get_log_level(log_level_str))
+
 def main():
     """Main loop for Cat Puppet Bridge"""
-
-    log_level = logging.INFO
 
     # Init logging
     logging.basicConfig(
         format="%(asctime)s %(levelname)s %(module)s.%(name)s.%(funcName)s %(message)s",
-        level=log_level)
+        level=logging.INFO)
 
     config_info = init_config()
 
@@ -153,21 +172,11 @@ def main():
                           config_info['config'],
                           config_info['config_path'])
 
-    match configs['global_config']['log_level']:
-        case "warn":
-            log_level = logging.WARNING
-        case "info":
-            log_level = logging.INFO
-        case "error":
-            log_level = logging.ERROR
-        case "debug":
-            log_level = logging.DEBUG
-
-    logging.getLogger().setLevel(log_level)
+    set_log_level(configs['global_config']['log_level'])
 
     discord_config = {'puppet_suffix': configs['irc_config']['PuppetSuffix'],
                       'puppet_min_size': int(configs['irc_config']['PuppetDisplayNameMinSize']),
-                      'log_level': log_level}
+                      'log_level': get_log_level(configs['global_config']['log_level'])}
     irc_config = {
         'puppet_suffix': configs['irc_config']['PuppetSuffix'],
         'tls': configs['irc_config']['TLS'],
@@ -187,26 +196,27 @@ def main():
     }
 
     threads = []
+    puppet_dict = {}
+    puppet_main_queues = {}
+    stats_data = StatsData()
+    stats_data.update('uptime', time.time())
 
     logging.info("starting discord thread")
     threads.append(threading.Thread(target=run_discord,
                                     args=[configs['discord_config']['Token'],
                                           discord_queues,
                                           configs['irc_to_discord_links'],
-                                          discord_config],
+                                          discord_config, stats_data],
                                     daemon=True).start())
 
     logging.info("starting IRC bot thread")
     threads.append(threading.Thread(target=run_ircbot,
-                                    args=[irc_config], daemon=True).start())
+                                    args=[irc_config, stats_data], daemon=True).start())
 
     logging.info("starting IRC listener thread")
     threads.append(threading.Thread(target=run_irclistener,
                                     args=[discord_queues['irc_to_discord_queue'],
-                                          irc_config], daemon=True).start())
-
-    puppet_dict = {}
-    puppet_main_queues = {}
+                                          irc_config, stats_data], daemon=True).start())
 
     for user in iter(discord_queues['puppet_queue'].get, object()):
         if user['command'] == 'active':
@@ -230,6 +240,7 @@ def main():
                           puppet_config, irc_config],
                     daemon=True)
                 ircpuppet_thread.start()
+                stats_data.increment('total_puppets')
 
                 puppet_dict[user['id']] = ircpuppet_thread
         if user['command'] == 'die':
@@ -238,6 +249,7 @@ def main():
             puppet_main_queues[user['id']].put(user)
             puppet_dict[user['id']].join()
             del puppet_dict[user['id']]
+            stats_data.decrement('total_puppets')
         if user['command'] == 'send' or user['command'] == 'afk' or user['command'] == 'unafk' \
            or user['command'] == 'nick' or user['command'] == 'join_part':
             if user['command'] == 'nick':
