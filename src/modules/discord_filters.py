@@ -87,7 +87,7 @@ class DiscordFilters():
 
     async def replace_customemotes(self, message):
         """Replace custom emotes with :emote_id:"""
-        return re.sub(r"<:([^:]+):\d+>", r":\1:", message)
+        return re.sub(r"<[:alpha:]?:([^:]+):\d+>", r":\1:", message)
 
     async def replace_channels(self, message):
         """Replace channel names with plaintext"""
