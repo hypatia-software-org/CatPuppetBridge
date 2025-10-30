@@ -21,6 +21,7 @@ import sys
 import os
 from queue import Queue
 from unittest.mock import MagicMock, patch
+import logging
 from irc import server
 
 from modules.irc_bridge import IRCBot, IRCListener, IRCPuppet
@@ -47,6 +48,7 @@ def reset_puppet(puppet):
 def puppet():
     real = IRCPuppet.__new__(IRCPuppet)
     real.connection = MagicMock()
+    real.log = logging.getLogger('unittest')
     reset_puppet(real)
 
     yield real

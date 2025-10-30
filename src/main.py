@@ -133,7 +133,7 @@ def main():
 
     # Init logging
     logging.basicConfig(
-        format="%(asctime)s %(levelname)s %(module)s %(message)s",
+        format="%(asctime)s %(levelname)s %(module)s.%(name)s.%(funcName)s %(message)s",
         level=logging.INFO)
 
     config_info = init_config()
