@@ -131,10 +131,12 @@ def read_config(irc_required: list, discord_required: list, config, config_path:
 def main():
     """Main loop for Cat Puppet Bridge"""
 
+    log_level = logging.INFO
+
     # Init logging
     logging.basicConfig(
         format="%(asctime)s %(levelname)s %(module)s.%(name)s.%(funcName)s %(message)s",
-        level=logging.INFO)
+        level=log_level)
 
     config_info = init_config()
 
