@@ -7,6 +7,17 @@
 # ▝▀ ▝▀▘ ▀ ▘  ▝▀▘▌  ▌  ▝▀▘ ▀ ▀▀ ▘  ▀▘▝▀▘▗▄▘▝▀▘ #
 ################################################
 
+[Global]
+###################
+# Global Settings #
+###################
+
+#############
+# log_level #
+#############
+# Valid log levels are: debug, info, warn, error
+log_level = info
+
 [Links]
 ###############
 # Links Block #

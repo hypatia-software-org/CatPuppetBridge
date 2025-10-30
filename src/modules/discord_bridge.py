@@ -1,12 +1,32 @@
-"""Main thread for the DiscordBot part of the bridge"""
+"""
+This file is part of CatPuppetBridge.
+
+CatPuppetBridge is free software: you can redistribute it and/or modify it under
+the terms of the GNU General Public License as published by the Free Software
+Foundation, either version 3 of the License, or (at your option) any later
+version.
+
+CatPuppetBridge is distributed in the hope that it will be useful, but WITHOUT
+ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
+FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License along with
+CatPuppetBridge. If not, see <https://www.gnu.org/licenses/>.
+
+Copyright (C) 2025 Lisa Marie Maginnis
+
+Main thread for the DiscordBot part of the bridge
+"""
 
 import re
 import logging
 import time
 import queue
 import asyncio
-
+import emoji
 import discord
+
+from modules.discord_filters import DiscordFilters
 
 
 class DiscordBot(discord.Client):
@@ -15,28 +35,32 @@ class DiscordBot(discord.Client):
     irc_to_discord_links = None
     discord_channel_mapping = None
     active_puppets = []
-    mention_lookup = {}
-    mention_lookup_re = None
     listener_config = None
     ready = False
     max_puppet_username = 30
+    filters = None
 
-    def __init__(self, queues, irc_to_discord_links, discord_config):
+    def __init__(self, queues, irc_to_discord_links, discord_config, data):
         intents = discord.Intents.default()
         intents.message_content = True
         intents.members = True
         intents.guilds = True
         intents.presences = True
 
+        self.data = data
+        self.filters = DiscordFilters(self)
+
         self.queues = queues
         self.irc_to_discord_links = irc_to_discord_links
         self.listener_config = discord_config
+        logging.getLogger('discord.gateway').setLevel(discord_config['log_level'])
+        logging.getLogger('discord.client').setLevel(discord_config['log_level'])
 
         super().__init__(intents=intents, chunk_guilds_at_startup=True)
 
     async def on_ready(self):
         """Init discord bot when ready, set the self.ready value"""
-        logging.info('We have logged in as %s', self.user)
+        logging.debug('We have logged in as %s', self.user)
         self.discord_channel_mapping = {}
         for channel in self.irc_to_discord_links:
             self.discord_channel_mapping[channel] = self.get_channel(
@@ -86,22 +110,14 @@ class DiscordBot(discord.Client):
     async def activate_puppet(self, user):
         """Push to the puppet queue to activate an irc puppet"""
         if not self.ready:
-            logging.info("Discord not ready yet")
+            logging.debug("Discord not ready yet")
         channels =  await self.accessible_channels(user.id)
         await self.send_irc_command(user, 'active', channels)
 
         self.active_puppets.append(user.id)
 
-        await self.compile_mention_lookup_re(user)
-        logging.info("%s is now active!", user.display_name)
-
-    async def compile_mention_lookup_re(self, user: discord.Member = None):
-        """Compile our regex for looking up mentions"""
-        if user:
-            irc_name = await self.generate_irc_nickname(user)
-            self.mention_lookup[irc_name + self.listener_config['puppet_suffix']] = user
-        self.mention_lookup_re = re.compile(
-            r'\b(' + '|'.join(map(re.escape, self.mention_lookup.keys())) + r')\b')
+        await self.filters.compile_mention_lookup_re(user)
+        logging.debug("%s is now active! (status: %s)", user.display_name, user.status)
 
     async def on_member_update(self, before: discord.Member, after: discord.Member):
         """Run on updates to members, check for display_name and role changes"""
@@ -109,9 +125,9 @@ class DiscordBot(discord.Client):
         if before.display_name != after.display_name:
             self.active_puppets.remove(before.id)
             self.active_puppets.append(after.id)
-            await self.compile_mention_lookup_re(after)
+            await self.filters.compile_mention_lookup_re(after)
             await self.send_irc_command(after, 'nick', None)
-            logging.info("%s changed display name from"
+            logging.debug("%s changed display name from"
                          "'%s' to '%s'",
                          before.name, before.display_name, after.display_name)
 
@@ -142,11 +158,11 @@ class DiscordBot(discord.Client):
         if previously_active and now_inactive:
             if after.id in self.active_puppets:
                 await self.send_irc_command(after, 'afk')
-                logging.info("%s is now offline! (status: %s)", after.display_name, after.status)
+                logging.debug("%s is now offline! (status: %s)", after.display_name, after.status)
 
     async def send_irc_command(self, user, command, data=None, channel=None):
         """Send a command to an IRC Puppet"""
-        logging.info('adding cmd to queue from discord: %s',command)
+        logging.debug('adding cmd to queue from discord: %s',command)
         self.queues['puppet_queue'].put({
             'nick': self.irc_safe_nickname(user.display_name),
             'display_name': user.display_name,
@@ -158,6 +174,8 @@ class DiscordBot(discord.Client):
             'data': data,
             'timestamp': time.time()
         })
+        if command == 'send':
+            self.data.increment('discord_messages')
 
     async def on_member_remove(self, member):
         """Run when member is removed or leaves guild"""
@@ -166,14 +184,14 @@ class DiscordBot(discord.Client):
             self.active_puppets.remove(member.id)
             irc_nick = await self.generate_irc_nickname(member)
             try:
-                del self.mention_lookup[irc_nick + self.listener_config['puppet_suffix']]
-                await self.compile_mention_lookup_re()
+                await self.filters.remove_from_mention_lookup(
+                    irc_nick + self.listener_config['puppet_suffix'])
             except KeyError:
                 logging.warning("Could not remove %s from mention_lookup table",
                                 member.display_name)
 
             await self.send_irc_command(member, 'die')
-            logging.info("%s has left!", member.display_name)
+            logging.debug("%s has left!", member.display_name)
 
     async def process_queue(self):
         """Thread to process our incoming queue from IRC"""
@@ -202,14 +220,14 @@ class DiscordBot(discord.Client):
 
                     # detect mentions
                     processed_message = msg['content']
-                    if self.mention_lookup_re:
-                        processed_message = self.mention_lookup_re.sub(
-                            lambda match: self.mention_lookup[match.group(0)].mention,
-                            msg['content'])
+                    if self.filters.mention_lookup_re:
+                        processed_message = self.filters.lookup_mention(msg['content'])
                     # Detect Avatar
                     avatar = await self.find_avatar(msg['author'])
                     if avatar is None:
                         avatar = 'https://robohash.org/' + msg['author'] + '?set=set4'
+                    # Detect emojis
+                    processed_message = await self.replace_emojis(processed_message)
                     try:
                         await webhook.send(processed_message, username=msg['author'],
                                            avatar_url=avatar)
@@ -220,6 +238,7 @@ class DiscordBot(discord.Client):
                 pass
             await asyncio.sleep(0.01)
 
+<<<<<<< HEAD:modules/discord_bridge.py
     async def process_dm_queue(self):
         """Thread to process our incoming dm_queue from IRC private messages"""
         while True:
@@ -251,6 +270,23 @@ class DiscordBot(discord.Client):
             except queue.Empty:
                 pass
             await asyncio.sleep(0.01)
+=======
+    async def replace_emojis(self, processed_message):
+        """ Replace strings like :heart: with their unicode emoji, or discord custom emoji """
+        def replace(match):
+            found_emoji = match.group(1)
+            for discord_emoji in self.emojis:
+                if discord_emoji.name == found_emoji:
+                    return str(discord_emoji)
+            unicode_emoji = emoji.emojize(f":{found_emoji}:", language='alias')
+            if unicode_emoji != f":{found_emoji}:":
+                return unicode_emoji
+
+            # Fallback if not found
+            return f":{found_emoji}:"
+
+        return re.sub(r":([a-zA-Z0-9_]+):", replace, processed_message)
+>>>>>>> e8ef916410f59d2d82fc47eb95fbd06d0b011526:src/modules/discord_bridge.py
 
     async def find_avatar(self, user):
         """Find an avatar if user exists on irc and discord"""
@@ -261,56 +297,6 @@ class DiscordBot(discord.Client):
                 if member.avatar:
                     return member.avatar.url
         return None
-
-    async def replace_customemotes(self, message):
-        """Replace custom emotes with :emote_id:"""
-        new_message = re.sub(r"<:([^:]+):\d+>", r":\1:", message)
-        return new_message
-
-    async def replace_channels(self, message):
-        """Replace channel names with plaintext"""
-        mention_pattern = r'<#!?(\d+)>'
-        new_message = ""
-        last_end = 0
-
-        for match in re.finditer(mention_pattern, message):
-            channel_id = int(match.group(1))
-            new_message += message[last_end:match.start()]
-            try:
-                channel = self.guilds[0].get_channel(channel_id) or \
-                    await self.guilds[0].fetch_channel(channel_id)
-                new_message += '#' + channel.name
-            except discord.NotFound as e:
-                logging.error('failed to find channel %i', channel_id)
-                logging.error(e)
-                new_message += match.group(0)  # fallback: keep original mention
-            last_end = match.end()
-
-        new_message += message[last_end:]  # append rest of string
-        return new_message
-
-
-    async def replace_mentions(self, message):
-        """Replace mentions with plaintext"""
-        mention_pattern = r'<@!?(\d+)>'
-        new_message = ""
-        last_end = 0
-
-        for match in re.finditer(mention_pattern, message):
-            user_id = int(match.group(1))
-            new_message += message[last_end:match.start()]
-            try:
-                user = self.get_user(user_id) or await self.fetch_user(user_id)
-                irc_nick = await self.generate_irc_nickname(user)
-                new_message += irc_nick + self.listener_config['puppet_suffix']
-            except discord.NotFound as e:
-                logging.error('failed to find user %i', user_id)
-                logging.error(e)
-                new_message += match.group(0)  # fallback: keep original mention
-            last_end = match.end()
-
-        new_message += message[last_end:]  # append rest of string
-        return new_message
 
     async def accessible_channels(self, user_id: int):
         """Find out what channels a puppet can see"""
@@ -358,20 +344,22 @@ class DiscordBot(discord.Client):
                         reply_author = await self.generate_irc_nickname(replied_to.author)
 
                     replied_to_content = replied_to.content[:50]
-                    replied_to_content = await self.replace_mentions(replied_to_content)
-                    replied_to_content = await self.replace_customemotes(replied_to_content)
-                    replied_to_content = await self.replace_channels(replied_to_content)
+                    replied_to_content = await self.filters.replace_mentions(replied_to_content)
+                    replied_to_content = await self.filters.replace_customemotes(replied_to_content)
+                    replied_to_content = await self.filters.replace_channels(replied_to_content)
+                    replied_to_content = self.filters.replace_time(replied_to_content)
 
                     template = 'replied to {author} "{message}...": {content}'
                     content = template.format(author=reply_author,
                                               message=replied_to_content,
                                               content=content)
                 except discord.NotFound:
-                    logging.info("Reply not found to message %s", message.content)
+                    logging.debug("Reply not found to message %s", message.content)
 
-            content = await self.replace_mentions(content)
-            content = await self.replace_customemotes(content)
-            content = await self.replace_channels(content)
+            content = await self.filters.replace_mentions(content)
+            content = await self.filters.replace_customemotes(content)
+            content = await self.filters.replace_channels(content)
+            content = self.filters.replace_time(content)
 
         return content, attach
 

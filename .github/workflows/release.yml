@@ -19,3 +19,14 @@ jobs:
           generate_release_notes: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Run the build for pypi
+        run: |
+          docker run --rm \
+            -v ${{ github.workspace }}:/app \
+            -w /app \
+            python:3.13-slim \
+            bash -c "apt-get update \
+              && apt-get install -y make \
+              && pip install -r requirements/prod-requirements.txt \
+              && pip install -r requirements/dev-requirements.txt && make build-pypi"

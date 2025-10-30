@@ -1,0 +1,4 @@
+debian/catpuppetbridge.service lib/systemd/system/
+src/* usr/lib/catpuppetbridge/
+debian/usr/bin/catpuppetbridge /usr/bin/
+debian/etc/catbridge.ini /etc/

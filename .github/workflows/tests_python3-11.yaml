@@ -1,4 +1,4 @@
-name: Lint
+name: Tests (Python 3.11)
 
 on:
   push:
@@ -7,14 +7,14 @@ on:
     branches: [main]
 
 jobs:
-  lint:
+  test:
     runs-on: ubuntu-latest
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Run make lint using pylint Docker image
+      - name: Run make tests using pytest Docker image
         run: |
           docker run --rm \
             -v ${{ github.workspace }}:/app \
@@ -23,4 +23,4 @@ jobs:
             bash -c "apt-get update \
               && apt-get install -y make \
               && pip install -r requirements/prod-requirements.txt \
-              && pip install pylint && make lint"
+              && pip install -r requirements/dev-requirements.txt && make test"
