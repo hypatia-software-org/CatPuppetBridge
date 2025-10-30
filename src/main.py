@@ -70,7 +70,8 @@ def init_config(config_filename='catbridge.ini'):
     except configparser.ParsingError as e:
         raise e
 
-    return config, config_path
+    config_data = {'config': config, 'config_path': config_path}
+    return config_data
 
 def check_required(required: list, config: dict, block: str):
     """Ensure required fields exist"""
@@ -135,8 +136,7 @@ def main():
         format="%(asctime)s %(levelname)s %(module)s %(message)s",
         level=logging.INFO)
 
-    # Init config
-    config, config_path = init_config()
+    config_info = init_config()
 
     configs = read_config(['server',
                            'BotChannel',
@@ -148,8 +148,8 @@ def main():
                            'PuppetDisplayNameMinSize',
                            'WebIRCPassword'],
                           ['Token'],
-                          config,
-                          config_path)
+                          config_info['config'],
+                          config_info['config_path'])
 
     match configs['global_config']['log_level']:
         case "warn":
