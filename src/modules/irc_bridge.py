@@ -31,9 +31,68 @@ import irc.client
 import irc.strings
 from irc.connection import Factory
 
+class BotTemplate(irc.client.SimpleIRCClient):
+    """ Shared IRC Bot functionality """
+    log = None
+    reconnect_data = None
+    def __init__(self):
+        super().__init__()
+        self.log = logging.getLogger(self.__class__.__name__)
+
+    def connect_and_retry(self, server: str, port: int, nickname: str, tls: bool = False):
+        """ Manage connection and retry rate """
+        retry_count = 1
+        self.reconnect_data = {'server': server, 'port': port, 'nickname': nickname, 'tls': tls}
+        while True:
+            if tls == "yes":
+                context = ssl.create_default_context(ssl.Purpose.SERVER_AUTH)
+                context.check_hostname = False
+                context.verify_mode = ssl.CERT_NONE
+                context.minimum_version = ssl.TLSVersion.TLSv1_2
+                ssl_factory = Factory(
+                    wrapper=lambda sock: context.wrap_socket(sock,server_hostname=server))
+
+                try:
+                    self.connection = self.reactor.server().connect(
+                        server, port, nickname,
+                        connect_factory=ssl_factory)
+                    self.log.info('connected with TLS sucessfully to %s:%i',
+                                 server, port)
+                    self.log.debug('connected sucessfully to %s:%i as %s',
+                                  server, port, nickname)
+                    break
+                except (irc.client.ServerConnectionError, TimeoutError):
+                    delay = min(10 * retry_count, 300)
+                    self.log.warning('connection failed %i times on %s:%i, retrying in %i',
+                                 retry_count, server, port, delay)
+                    retry_count = retry_count + 1
+                    time.sleep(delay)
+            else:
+                try:
+                    self.connection = self.reactor.server().connect(
+                        server, port, nickname)
+                    self.log.info('connected sucessfully to %s:%i',
+                                 server, port)
+                    self.log.debug('connected sucessfully to %s:%i as %s',
+                                  server, port, nickname)
+                    break
+                except (irc.client.ServerConnectionError, TimeoutError):
+                    delay = min(10 * retry_count, 300)
+                    self.log.warning('connection failed %i times on %s:%i, retrying in %i',
+                                 retry_count, server, port, delay)
+                    retry_count = retry_count + 1
+                    time.sleep(delay)
+
+        self.connection.add_global_handler("disconnect", self.on_disconnect)
+
+    def on_disconnect(self, c, e):
+        """ When disconnected, try to reconnect """
+        self.log.debug("event %s context %s", e, c)
+        self.connect_and_retry(self.reconnect_data['server'], self.reconnect_data['port'],
+                               self.reconnect_data['nickname'], self.reconnect_data['tls'])
 
 # pylint: disable=too-many-instance-attributes
-class IRCPuppet(irc.client.SimpleIRCClient):
+class IRCPuppet(BotTemplate):
     """Main thread for the IRC Puppets"""
     queues = None
     channels = None
@@ -57,20 +116,10 @@ class IRCPuppet(irc.client.SimpleIRCClient):
         self.config.update(puppet_config)
         self.config['webirc_hostname'] = 'discord.bridge'
         self.end_thread = False
-        if config['tls'] == "yes":
-            context = ssl.create_default_context(ssl.Purpose.SERVER_AUTH)
-            context.check_hostname = False
-            context.verify_mode = ssl.CERT_NONE
-            context.minimum_version = ssl.TLSVersion.TLSv1_2
-            ssl_factory = Factory(
-                wrapper=lambda sock: context.wrap_socket(sock,server_hostname=config['server']))
 
-            self.connection = self.reactor.server().connect(
-                self.config['server'], self.config['port'], self.config['nickname'],
-                connect_factory=ssl_factory)
-        else:
-            self.connection = self.reactor.server().connect(
-                self.config['server'], self.config['port'], self.config['nickname'])
+        self.connect_and_retry(self.config['server'], self.config['port'], self.config['nickname'],
+                               self.config['tls'])
+
         self.connection.send_raw(
                 f"WEBIRC {self.config['webirc_password']} {self.config['webirc_hostname']}"
                 f" {self.config['webirc_hostname']} {self.config['webirc_ip']}"
@@ -81,7 +130,7 @@ class IRCPuppet(irc.client.SimpleIRCClient):
 
     def on_privmsg(self, c, event):
         """Process DMs and pass to discord user"""
-        logging.debug("conext %s", c)
+        self.log.debug("conext %s", c)
         nickname = event.source.split('!', 1)[0]
         data = {
             'author': nickname,
@@ -99,7 +148,7 @@ class IRCPuppet(irc.client.SimpleIRCClient):
             if msg['command'] == 'send':
                 if msg['data'] is None:
                     continue
-                logging.debug("Found send, sending from puppet %s", self.config['nickname'])
+                self.log.debug("Found send, sending from puppet %s", self.config['nickname'])
                 messages = self.split_irc_message(msg)
                 for message in messages:
                     if str(msg['channel']) in self.discord_to_irc_links.keys():
@@ -118,26 +167,26 @@ class IRCPuppet(irc.client.SimpleIRCClient):
                 self.end_thread = True
                 self.die('has left discord')
             else:
-                logging.error("ERROR: Queue command '%s' not found!", msg['command'])
+                self.log.error("ERROR: Queue command '%s' not found!", msg['command'])
 
     def join_part(self, channels):
         """Manage part and join commands from discord"""
         for channel in channels:
             if channel not in self.channels:
-                logging.debug("Puppet Joining %s", self.discord_to_irc_links[str(channel)])
+                self.log.debug("Puppet Joining %s", self.discord_to_irc_links[str(channel)])
                 self.connection.join(self.discord_to_irc_links[str(channel)])
         for channel in self.channels:
             if channel not in channels:
-                logging.debug("Puppet Parting %s", self.discord_to_irc_links[str(channel)])
+                self.log.debug("Puppet Parting %s", self.discord_to_irc_links[str(channel)])
                 self.connection.part(self.discord_to_irc_links[str(channel)])
         self.channels = channels
 
     def on_welcome(self, c, e):
         """On IRCd welcome, join channels and start worker thread"""
-        logging.debug("event %s", e)
+        self.log.debug("event %s", e)
 
         for channel in self.channels:
-            logging.debug("Puppet Joining %s", self.discord_to_irc_links[str(channel)])
+            self.log.debug("Puppet Joining %s", self.discord_to_irc_links[str(channel)])
             c.join(self.discord_to_irc_links[str(channel)])
         #self.reactor.scheduler.execute_every(1, self.process_discord_queue)
         self.queue_thread = threading.Thread(target=self.process_discord_queue, daemon=True)
@@ -177,16 +226,16 @@ class IRCPuppet(irc.client.SimpleIRCClient):
 
     def on_nicknameinuse(self, c, e):
         """Run if neckname is already in use"""
-        logging.debug("event %s", e)
+        self.log.debug("event %s", e)
         c.nick(c.get_nickname() + "_")
         self.config['nickname'] = c.get_nickname()
 
     def start(self):
         """Start the IRC Puppet loop"""
-        logging.debug("Starting IRC puppet loop for puppet %s", self.config['nickname'])
+        self.log.debug("Starting IRC puppet loop for puppet %s", self.config['nickname'])
         while not self.end_thread:
             self.reactor.process_once(timeout=0.2)
-        logging.debug('IRC Puppet killing main thread, %s', self.config['nickname'])
+        self.log.debug('IRC Puppet killing main thread, %s', self.config['nickname'])
         sys.exit(0)
         #self.reactor.process_forever()
 
@@ -204,11 +253,11 @@ class IRCPuppet(irc.client.SimpleIRCClient):
 
     def die(self, msg):
         """Kill ourself"""
-        logging.debug('IRC Puppet dying, %s', self.config['nickname'])
+        self.log.debug('IRC Puppet dying, %s', self.config['nickname'])
         self.connection.disconnect(msg)
         sys.exit(0)
 
-class IRCListener(irc.client.SimpleIRCClient):
+class IRCListener(BotTemplate):
     """Listener for irc to discord traffic"""
     out_queue = None
     config = None
@@ -217,43 +266,31 @@ class IRCListener(irc.client.SimpleIRCClient):
     def __init__(self, out_queue, config):
         super().__init__()
         self.reactor = irc.client.Reactor()
+        self.config = config
         # TODO: ircname
-        if config['tls'] == "yes":
-            context = ssl.create_default_context(ssl.Purpose.SERVER_AUTH)
-            context.check_hostname = False
-            context.verify_mode = ssl.CERT_NONE
-            context.minimum_version = ssl.TLSVersion.TLSv1_2
-            ssl_factory = Factory(
-                wrapper=lambda sock: context.wrap_socket(sock, server_hostname=config['server']))
+        self.connect_and_retry(self.config['server'], self.config['port'],
+                               self.config['listener_nickname'],
+                               self.config['tls'])
 
-            self.connection = self.reactor.server().connect(
-                config['server'], config['port'], config['listener_nickname'],
-                connect_factory=ssl_factory
-            )
-        else:
-            self.connection = self.reactor.server().connect(
-                config['server'], config['port'], config['listener_nickname']
-            )
         self.out_queue = out_queue
         self.connection.add_global_handler("welcome", self.on_welcome)
         self.connection.add_global_handler("pubmsg", self.on_pubmsg)
         self.connection.add_global_handler("action", self.on_action)
 
-        self.config = config
         self.channels = config['channels']
 
     def on_welcome(self, c, e):
         """On IRCd welcome, join channels"""
         for channel in self.channels:
-            logging.debug("Listener joining %s", channel)
-            logging.debug("event %s", e)
+            self.log.debug("Listener joining %s", channel)
+            self.log.debug("event %s", e)
             c.join(channel)
 
     def on_action(self, c, event):
         """Relay /me aka IRC actions"""
-        logging.debug("Irc action found, adding to queue")
-        logging.debug("conext %s", c)
-        logging.debug("event %s", event)
+        self.log.debug("Irc action found, adding to queue")
+        self.log.debug("conext %s", c)
+        self.log.debug("event %s", event)
         nickname = event.source.split('!', 1)[0]
         data = {
             'author': nickname,
@@ -264,10 +301,10 @@ class IRCListener(irc.client.SimpleIRCClient):
 
     def on_pubmsg(self, c, event):
         """On public messages, relay to discord"""
-        logging.debug("c %s", c)
+        self.log.debug("c %s", c)
         nickname = event.source.split('!', 1)[0]
         if not nickname.endswith(self.config['puppet_suffix']):
-            logging.debug("Irc message found, adding to queue")
+            self.log.debug("Irc message found, adding to queue")
             data = {
                 'author': nickname,
                 'channel': event.target,
@@ -277,48 +314,40 @@ class IRCListener(irc.client.SimpleIRCClient):
 
     def start(self):
         """Start the irc loop, forever"""
-        logging.debug("Starting IRC client loop...")
+        self.log.debug("Starting IRC client loop...")
         self.reactor.process_forever()
 
-class IRCBot(irc.bot.SingleServerIRCBot):
+class IRCBot(BotTemplate):
     """Generic bot for running admin commands on the bridge from IRC"""
-    def __init__(self, config):
-        if config['tls'] == "yes":
-            context = ssl.create_default_context(ssl.Purpose.SERVER_AUTH)
-            context.check_hostname = False
-            context.verify_mode = ssl.CERT_NONE
-            context.minimum_version = ssl.TLSVersion.TLSv1_2
-            ssl_factory = Factory(
-                wrapper=lambda sock: context.wrap_socket(sock, server_hostname=config['server']))
 
-            irc.bot.SingleServerIRCBot.__init__(
-                self, [(config['server'], config['port'])],
-                config['bot_nickname'], config['bot_nickname'], connect_factory=ssl_factory)
-        else:
-            irc.bot.SingleServerIRCBot.__init__(
-                self, [(config['server'], config['port'])], config['bot_nickname'],
-                config['bot_nickname'])
+    channels = None
+
+    def __init__(self, config):
+        super().__init__()
+        self.reactor = irc.client.Reactor()
+        self.connect_and_retry(config['server'], config['port'], config['bot_nickname'],
+                               config['tls'])
         self.channel = config['bot_channel']
 
     def on_nicknameinuse(self, c, e):
         """Run if nickname is already in use"""
-        logging.debug("event %s", e)
+        self.log.debug("event %s", e)
         c.nick(c.get_nickname() + "_")
 
     def on_welcome(self, c, e):
         """On welcome join channel"""
-        logging.debug("event %s", e)
+        self.log.debug("event %s", e)
         c.join(self.channel)
 
     def on_privmsg(self, c, e):
         """Check private messages for commands"""
-        logging.debug("conext %s", c)
-        logging.debug("event %s", e)
+        self.log.debug("conext %s", c)
+        self.log.debug("event %s", e)
         self.do_command(e, e.arguments[0])
 
     def on_pubmsg(self, c, e):
         """Check public messages for commands"""
-        logging.debug("conext %s", c)
+        self.log.debug("conext %s", c)
         a = e.arguments[0].split(":", 1)
         if len(a) > 1 and irc.strings.lower(a[0]) == irc.strings.lower(
             self.connection.get_nickname()
@@ -331,14 +360,6 @@ class IRCBot(irc.bot.SingleServerIRCBot):
         c = self.connection
 
         if cmd == "stats":
-            for chname, chobj in self.channels.items():
-                c.notice(nick, "--- Channel statistics ---")
-                c.notice(nick, "Channel: " + chname)
-                users = sorted(chobj.users())
-                c.notice(nick, "Users: " + ", ".join(users))
-                opers = sorted(chobj.opers())
-                c.notice(nick, "Opers: " + ", ".join(opers))
-                voiced = sorted(chobj.voiced())
-                c.notice(nick, "Voiced: " + ", ".join(voiced))
+            c.notice(nick, "Stats placeholder")
         else:
             c.notice(nick, "Not understood: " + cmd)
