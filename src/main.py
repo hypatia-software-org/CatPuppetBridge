@@ -243,15 +243,14 @@ def main():
                 stats_data.increment('total_puppets')
 
                 puppet_dict[user['id']] = ircpuppet_thread
-        if user['command'] == 'die':
+        elif user['command'] == 'die':
             logging.debug("stopping IRC Puppet: %s", user['irc_nick'])
             logging.info("stopping IRC Puppet")
             puppet_main_queues[user['id']].put(user)
             puppet_dict[user['id']].join()
             del puppet_dict[user['id']]
             stats_data.decrement('total_puppets')
-        if user['command'] == 'send' or user['command'] == 'afk' or user['command'] == 'unafk' \
-           or user['command'] == 'nick' or user['command'] == 'join_part':
+        else:
             if user['command'] == 'nick':
                 user['irc_nick'] += configs['irc_config']['PuppetSuffix']
             try:

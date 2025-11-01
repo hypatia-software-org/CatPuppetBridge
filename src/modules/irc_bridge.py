@@ -131,18 +131,49 @@ class IRCPuppet(BotTemplate):
             )
 
         self.connection.add_global_handler("welcome", self.on_welcome)
-        self.connection.add_global_handler("on_privmsg", self.on_privmsg)
+        self.connection.add_global_handler("privmsg", self.on_privmsg)
+        self.connection.add_global_handler("all_raw_messages", self.on_raw)
+
+    def on_raw(self, c, event):
+        """ Process special messages such has 401/NOSUCHNICK """
+        self.log.debug(event)
+        self.log.debug(c)
+        data = event.arguments[0]
+        split_data = data.split()
+        if len(split_data) >= 4:
+            if split_data[1] == "401":
+                user = split_data[3][1:]
+                data = {
+                    'author': 'NOSUCHNICK',
+                    'channel': self.config['nickname'],
+                    'content': "ERROR: User '" + user + "' not found, no such nick exists on irc!",
+                    'error': True
+                }
+                self.queues['out_queue'].put(data)
 
     def on_privmsg(self, c, event):
         """Process DMs and pass to discord user"""
         self.log.debug("conext %s", c)
+        self.log.debug("privmsg, attempting to process")
         nickname = event.source.split('!', 1)[0]
         data = {
             'author': nickname,
             'channel': self.config['nickname'],
-            'content': event.arguments[0]
+            'content': event.arguments[0],
+            'error': False
         }
         self.queues['out_queue'].put(data)
+
+    def do_send(self, msg):
+        """ Handle sending messages from discord """
+        if msg['data'] is None:
+            return
+        self.log.debug("Found send, sending from puppet %s", self.config['nickname'])
+        messages = self.split_irc_message(msg)
+        for message in messages:
+            if str(msg['channel']) in self.discord_to_irc_links.keys():
+                self.connection.privmsg(
+                    self.discord_to_irc_links[str(msg['channel'])], message)
 
     def process_discord_queue(self):
         """Main worker thread for handling commands form discord"""
@@ -152,29 +183,27 @@ class IRCPuppet(BotTemplate):
                 time.sleep(1)
 
             self.log.debug("Processing command %s", msg)
-            if msg['command'] == 'send':
-                if msg['data'] is None:
-                    continue
-                self.log.debug("Found send, sending from puppet %s", self.config['nickname'])
-                messages = self.split_irc_message(msg)
-                for message in messages:
-                    if str(msg['channel']) in self.discord_to_irc_links.keys():
-                        self.connection.privmsg(
-                            self.discord_to_irc_links[str(msg['channel'])], message)
-            elif msg['command'] == 'afk':
-                self.afk()
-            elif msg['command'] == 'unafk':
-                self.unafk()
-            elif msg['command'] == 'nick':
-                self.config['nickname'] = msg['irc_nick']
-                self.connection.nick(msg['irc_nick'])
-            elif msg['command'] == 'join_part':
-                self.join_part(msg['data'])
-            elif msg['command'] == 'die':
-                self.end_thread = True
-                self.die('has left discord')
-            else:
-                self.log.error("ERROR: Queue command '%s' not found!", msg['command'])
+            match msg['command']:
+                case 'send':
+                    self.do_send(msg)
+                case 'afk':
+                    self.afk()
+                case 'unafk':
+                    self.unafk()
+                case 'nick':
+                    self.config['nickname'] = msg['irc_nick']
+                    self.connection.nick(msg['irc_nick'])
+                case 'join_part':
+                    self.join_part(msg['data'])
+                case 'send_dm':
+                    messages = self.split_irc_message(msg)
+                    for message in messages:
+                        self.connection.privmsg(msg['channel'], message)
+                case 'die':
+                    self.end_thread = True
+                    self.die('has left discord')
+                case _:
+                    self.log.error("ERROR: Queue command '%s' not found!", msg['command'])
 
     def join_part(self, channels):
         """Manage part and join commands from discord"""
