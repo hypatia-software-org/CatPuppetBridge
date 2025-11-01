@@ -39,6 +39,7 @@ class DiscordBot(discord.Client):
     ready = False
     max_puppet_username = 30
     filters = None
+    sessions = {}
 
     def __init__(self, queues, irc_to_discord_links, discord_config, data):
         intents = discord.Intents.default()
@@ -246,26 +247,30 @@ class DiscordBot(discord.Client):
                 msg = self.queues['dm_out_queue'].get(timeout=0.5)
                 target = None
                 user = None
-
-                if self.mention_lookup_re:
-                    target = self.mention_lookup_re.sub(
-                        lambda match: self.mention_lookup[match.group(0)].mention,
+                if self.filters.mention_lookup_re:
+                    target = self.filters.mention_lookup_re.sub(
+                        lambda match: self.filters.mention_lookup[match.group(0)].mention,
                         msg['channel'])
                     user_id = re.match(r"<@!?(\d+)>", target)
                     user = await self.fetch_user(user_id.group(1))
-                if user:
+                if user and target:
                     # detect mentions
                     processed_message = msg['content']
-                    if self.mention_lookup_re:
-                        processed_message = self.mention_lookup_re.sub(
-                            lambda match: self.mention_lookup[match.group(0)].mention,
+                    if self.filters.mention_lookup_re:
+                        processed_message = self.filters.mention_lookup_re.sub(
+                            lambda match: self.filters.mention_lookup[match.group(0)].mention,
                             msg['content'])
-                        processed_message = 'Message from IRC user ' + msg['author'] + ': ' +\
-                            processed_message
+                        if not msg['error']:
+                            processed_message = 'Message from ' + msg['author'] + ': ' +\
+                                processed_message
                     try:
                         await user.send(processed_message)
                     except discord.errors.HTTPException as e:
-                        logging.warn(e)
+                        logging.debug(user)
+                        logging.debug(target)
+                        logging.debug(processed_message)
+                        logging.debug(msg)
+                        logging.debug(e)
             except queue.Empty:
                 pass
             await asyncio.sleep(0.01)
@@ -374,53 +379,90 @@ class DiscordBot(discord.Client):
             content = '[edit] ' + content
             await self.send_irc_command(before.author, 'send', content, before.channel.id)
 
+    def do_session(self, split_msg, message):
+        """ Setup DM session with IRC user from Discord """
+        reply = ''
+        if len(split_msg) >= 2:
+            target_user = split_msg[1]
+            self.sessions[message.author.id] = target_user
+            reply = discord.utils.escape_markdown(
+                f'Session started with "{target_user}", '\
+                f'everything typed will be sent to {target_user} until you type `sessionend`')
+        else:
+            reply = 'Not enough parameters. Be sure to type `session USERNAME`'
+        return reply
+
+    def do_session_end(self, message):
+        """ End a DM session with an IRC user """
+        reply = ''
+        if message.author.id in self.sessions:
+            del self.sessions[message.author.id]
+            reply = "Session ENDED"
+        else:
+            reply = "Cannot end sesion, there is no session to END"
+        return reply
+
+    async def do_dm(self, split_msg, dm_user):
+        """ Send a single DM to IRC User """
+        reply = ''
+        if len(split_msg) >= 3:
+            target_user = split_msg[1]
+            dm = ' '.join(split_msg[2:])
+            await self.send_irc_command(dm_user, 'send_dm', dm, target_user)
+        else:
+            reply = 'Not enough parameters. Be sure to type `dm USERNAME MESSAGE`'
+        return reply
+
+    async def do_process_dm(self, dm_user, message):
+        """ Process DM Handling """
+        reply = ''
+        split_msg = message.content.split()
+        command = split_msg[0] if len(split_msg) >= 1 else None
+        logging.debug(message)
+
+        if message.author.id in self.sessions and command != 'sessionend':
+            await self.send_irc_command(dm_user, 'send_dm', message.content,
+                                            self.sessions[message.author.id])
+        elif command == 'sessionend':
+            reply = self.do_session_end(message)
+        elif command == 'help':
+            # pylint: disable=line-too-long
+            reply = 'This is the CatPuppetBridge bot, that links Discord to IRC. Here is a list of commands:\n'\
+                '* `dm USERNAME MESSAGE` - Send a Direct Message to a user on IRC. For example: `dm coolusername Whats up?` would DM `coolusername` on IRC the message `Whats up?`\n'\
+                '* `session USERNAME` - Open a session with a user on IRC. All messages typed to this bot will be sent to the user until the session is ended\n'\
+                '* `sessionend` - End a session with an IRC user\n'
+        elif command == 'dm':
+            reply = await self.do_dm(split_msg, dm_user)
+        elif command == "session":
+            reply = self.do_session(split_msg, message)
+        else:
+            reply = 'Command not found, try using the command `help` for more information.'
+        try:
+            if reply:
+                await dm_user.send(reply)
+        except discord.errors.HTTPException as e:
+            logging.error(e)
+
     async def on_message(self, message):
         """Run when messages are read from discord"""
 
+        logging.debug(message)
         # Make sure we are ready first
         if not self.ready:
             return
         # Don't repeat messages
-        if message.author.bot or message.webhook_id is not None:
-            return
-
-        if isinstance(message.channel, discord.DMChannel):
-            logging.info("Discord bot received a DM, processing")
-
-            dm_user = await self.fetch_user(message.author.id)
-            if not self.active_puppets or message.author.id not in self.active_puppets:
-                await self.activate_puppet(dm_user)
-            reply = ''
-            split_msg = message.content.split()
-            command = split_msg[0] if len(split_msg) >= 1 else None
-            if command == 'help':
-                # pylint: disable=line-too-long
-                reply = 'This is the CatPuppetBridge bot, that links Discord to IRC. Here is a list of commands:\n'\
-                '* `dm USERNAME MESSAGE` - Send a Direct Message to a user on IRC. For example: `dm coolusername Whats up?` would DM `coolusername` on IRC the message `Whats up?`\n'\
-                '* `session USERNAME` - Open a session with a user on IRC. All messages typed to this bot will be sent to the user until the session is ended\n'\
-                '* `sessionend` - End a session with an IRC user\n'
-            elif command == 'dm':
-                if len(split_msg) >= 3:
-                    target_user = split_msg[1]
-                    dm = ' '.join(split_msg[2:])
-                    await self.send_irc_command(message.author, 'send_dm', dm, target_user)
-                else:
-                    reply = 'Not enough parameters. Be sure to type `dm USERNAME MESSAGE`'
-            elif command == "session":
-                if len(split_msg) >= 2:
-                    target_user = split_msg[1]
-                else:
-                    reply = 'Not enough parameters. Be sure to type `session USERNAME`'
-            else:
-                reply = 'Command not found, try using the command `help` for more information.'
-            try:
-                await dm_user.send(reply)
-            except discord.errors.HTTPException as e:
-                logging.error(e)
+        if message.author.bot and message.webhook_id is not None or \
+           message.author.id == self.user.id:
             return
 
         if not self.active_puppets or message.author.id not in self.active_puppets:
             await self.activate_puppet(message.author)
+
+        if isinstance(message.channel, discord.DMChannel):
+            logging.debug("Discord bot received a DM, processing")
+            dm_user = self.guilds[0].get_member(message.author.id)
+            await self.do_process_dm(dm_user, message)
+            return
 
         content, attach = await self.parse_message_content(message)
 

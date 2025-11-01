@@ -136,6 +136,7 @@ def test_on_irc_safe_nickname(bot):
     assert nickname == 'Thisisareallylongnamewithspaces'
 
 @pytest.mark.filterwarnings("ignore:coroutine 'AsyncMockMixin._execute_mock_call' was never awaited:RuntimeWarning")
+@pytest.mark.filterwarnings("ignore:coroutine 'DiscordBot.process_dm_queue' was never awaited:RuntimeWarning")
 @pytest.mark.asyncio
 async def test_activate_puppet(bot):
     user = create_fake_user()
@@ -148,6 +149,7 @@ async def test_activate_puppet(bot):
     assert bot.queues['puppet_queue'].qsize() == 1
 
 @pytest.mark.filterwarnings("ignore:coroutine 'AsyncMockMixin._execute_mock_call' was never awaited:RuntimeWarning")
+@pytest.mark.filterwarnings("ignore:coroutine 'DiscordBot.process_dm_queue' was never awaited:RuntimeWarning")
 @pytest.mark.asyncio
 async def test_on_member_update(bot):
     user_before = create_fake_user()
@@ -175,6 +177,7 @@ async def test_on_member_update(bot):
 
 
 @pytest.mark.filterwarnings("ignore:coroutine 'AsyncMockMixin._execute_mock_call' was never awaited:RuntimeWarning")
+@pytest.mark.filterwarnings("ignore:coroutine 'DiscordBot.process_dm_queue' was never awaited:RuntimeWarning")
 @pytest.mark.asyncio
 async def test_on_presence_update_online_to_offline(bot):
     user_before = create_fake_user()
@@ -197,6 +200,7 @@ async def test_on_presence_update_online_to_offline(bot):
     assert data['command'] == 'afk'
 
 @pytest.mark.filterwarnings("ignore:coroutine 'AsyncMockMixin._execute_mock_call' was never awaited:RuntimeWarning")
+@pytest.mark.filterwarnings("ignore:coroutine 'DiscordBot.process_dm_queue' was never awaited:RuntimeWarning")
 @pytest.mark.asyncio
 async def test_on_presence_update_online_to_dnd(bot):
     user_before = create_fake_user()
@@ -219,6 +223,7 @@ async def test_on_presence_update_online_to_dnd(bot):
     assert data['command'] == 'afk'
 
 @pytest.mark.filterwarnings("ignore:coroutine 'AsyncMockMixin._execute_mock_call' was never awaited:RuntimeWarning")
+@pytest.mark.filterwarnings("ignore:coroutine 'DiscordBot.process_dm_queue' was never awaited:RuntimeWarning")
 @pytest.mark.asyncio
 async def test_on_presence_update_offline_to_idle(bot):
     user_before = create_fake_user(status=discord.Status.offline)
@@ -241,6 +246,7 @@ async def test_on_presence_update_offline_to_idle(bot):
     assert data['command'] == 'unafk'
 
 @pytest.mark.filterwarnings("ignore:coroutine 'AsyncMockMixin._execute_mock_call' was never awaited:RuntimeWarning")
+@pytest.mark.filterwarnings("ignore:coroutine 'DiscordBot.process_dm_queue' was never awaited:RuntimeWarning")
 @pytest.mark.asyncio
 async def test_on_presence_update_offline_to_online(bot):
     user_before = create_fake_user(status=discord.Status.offline)
@@ -263,6 +269,7 @@ async def test_on_presence_update_offline_to_online(bot):
     assert data['command'] == 'unafk'
 
 @pytest.mark.filterwarnings("ignore:coroutine 'AsyncMockMixin._execute_mock_call' was never awaited:RuntimeWarning")
+@pytest.mark.filterwarnings("ignore:coroutine 'DiscordBot.process_dm_queue' was never awaited:RuntimeWarning")
 @pytest.mark.asyncio
 async def test_on_presence_update_dnd_to_online(bot):
     user_before = create_fake_user(status=discord.Status.dnd)
@@ -285,6 +292,7 @@ async def test_on_presence_update_dnd_to_online(bot):
     assert data['command'] == 'unafk'
 
 @pytest.mark.filterwarnings("ignore:coroutine 'AsyncMockMixin._execute_mock_call' was never awaited:RuntimeWarning")
+@pytest.mark.filterwarnings("ignore:coroutine 'DiscordBot.process_dm_queue' was never awaited:RuntimeWarning")
 @pytest.mark.asyncio
 async def test_on_presence_update_offline_to_dnd(bot):
     user_before = create_fake_user(status=discord.Status.offline)
@@ -304,6 +312,7 @@ async def test_on_presence_update_offline_to_dnd(bot):
     assert bot.queues['puppet_queue'].qsize() == 0
 
 @pytest.mark.filterwarnings("ignore:coroutine 'AsyncMockMixin._execute_mock_call' was never awaited:RuntimeWarning")
+@pytest.mark.filterwarnings("ignore:coroutine 'DiscordBot.process_dm_queue' was never awaited:RuntimeWarning")
 @pytest.mark.asyncio
 async def test_on_presence_update_online_to_idle(bot):
     user_before = create_fake_user(status=discord.Status.online)
@@ -323,6 +332,7 @@ async def test_on_presence_update_online_to_idle(bot):
     assert bot.queues['puppet_queue'].qsize() == 0
 
 @pytest.mark.filterwarnings("ignore:coroutine 'AsyncMockMixin._execute_mock_call' was never awaited:RuntimeWarning")
+@pytest.mark.filterwarnings("ignore:coroutine 'DiscordBot.process_dm_queue' was never awaited:RuntimeWarning")
 @pytest.mark.asyncio
 async def test_on_member_remove(bot):
     user = create_fake_user()
@@ -344,6 +354,7 @@ async def test_on_member_remove(bot):
     assert data['command'] == 'die'
 
 @pytest.mark.filterwarnings("ignore:coroutine 'AsyncMockMixin._execute_mock_call' was never awaited:RuntimeWarning")
+@pytest.mark.filterwarnings("ignore:coroutine 'DiscordBot.process_dm_queue' was never awaited:RuntimeWarning")
 @pytest.mark.asyncio
 async def test_find_avatar(bot):
     user = create_fake_user()
