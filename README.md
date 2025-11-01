@@ -7,6 +7,7 @@ A modern bridge from IRC to Discord which uses "puppets" (fake IRC Users control
 ## Features
 
 * Uses WebIRC for enhanced security (makes it harder for people to impersonate a bot)
+* Allows sending Direct/Private Messages between Discord and IRC Users
 * IRC Puppets of Discord users
   * Puppets only join linked channels that they have permissions to be in (we may be the only bridge that does this!)
   * Puppets will quit when the user leaves the discord Guild
