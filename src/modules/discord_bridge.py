@@ -245,15 +245,10 @@ class DiscordBot(discord.Client):
         # Periodically check the queue and send messages
             try:
                 msg = self.queues['dm_out_queue'].get(timeout=0.5)
-                target = None
                 user = None
-                if self.filters.mention_lookup_re:
-                    target = self.filters.mention_lookup_re.sub(
-                        lambda match: self.filters.mention_lookup[match.group(0)].mention,
-                        msg['channel'])
-                    user_id = re.match(r"<@!?(\d+)>", target)
-                    user = await self.fetch_user(user_id.group(1))
-                if user and target:
+                if 'channel' in msg:
+                    user = await self.fetch_user(msg['channel'])
+                if user:
                     # detect mentions
                     processed_message = msg['content']
                     if self.filters.mention_lookup_re:
@@ -267,7 +262,6 @@ class DiscordBot(discord.Client):
                         await user.send(processed_message)
                     except discord.errors.HTTPException as e:
                         logging.debug(user)
-                        logging.debug(target)
                         logging.debug(processed_message)
                         logging.debug(msg)
                         logging.debug(e)

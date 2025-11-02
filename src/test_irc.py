@@ -49,6 +49,7 @@ def puppet():
     real = IRCPuppet.__new__(IRCPuppet)
     real.connection = MagicMock()
     real.log = logging.getLogger('unittest')
+    real.discord_id = '123456'
     reset_puppet(real)
 
     yield real
@@ -155,7 +156,7 @@ def test_puppet_on_privmsg(puppet):
     # Assert data is correct
     data = puppet.queues['out_queue'].get()
     assert data['author'] == 'TestUser'
-    assert data['channel'] == puppet.config['nickname']
+    assert data['channel'] == '123456'
     assert data['content'] == event.arguments[0]
 
 def test_puppet_process_discord_queue_afk(puppet): 
