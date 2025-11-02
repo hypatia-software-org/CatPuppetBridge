@@ -106,6 +106,7 @@ class IRCPuppet(BotTemplate):
     connection = None
     end_thread = False
     queue_thread = None
+    discord_id = None
 
     def __init__(self, queues, discord_to_irc_links, puppet_config,
                  config):
@@ -113,11 +114,12 @@ class IRCPuppet(BotTemplate):
         self.reactor = irc.client.Reactor()
 
         # TODO: ircname
+        self.discord_id = puppet_config['discord_id']
         self.queues = queues
         self.channels = puppet_config['channels']
         self.discord_to_irc_links = discord_to_irc_links
 
-        self.config = config
+        self.config = dict(config)
         self.config.update(puppet_config)
         self.config['webirc_hostname'] = 'discord.bridge'
         self.end_thread = False
@@ -158,7 +160,7 @@ class IRCPuppet(BotTemplate):
         nickname = event.source.split('!', 1)[0]
         data = {
             'author': nickname,
-            'channel': self.config['nickname'],
+            'channel': self.discord_id,
             'content': event.arguments[0],
             'error': False
         }

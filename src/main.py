@@ -229,7 +229,8 @@ def main():
                 puppet_config = {
                     'channels': user['data'],
                     'nickname': puppet_nickname,
-                    'webirc_ip': ula_address_from_string(puppet_nickname)
+                    'webirc_ip': ula_address_from_string(puppet_nickname),
+                    'discord_id': user['id']
                     }
                 ircpuppet_thread = threading.Thread(
                     target=run_ircpuppet,
