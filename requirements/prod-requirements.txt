@@ -1,4 +1,4 @@
 irc==20.5.0
 discord.py==2.6.4
 emoji==2.15.0
-psutil==7.1.2
+psutil==7.1.3
