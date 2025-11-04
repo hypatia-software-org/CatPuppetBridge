@@ -287,12 +287,14 @@ class DiscordBot(discord.Client):
 
     async def find_avatar(self, user):
         """Find an avatar if user exists on irc and discord"""
-        await self.guilds[0].chunk()
+        logging.debug("Attemping to find avatar")
         members = self.guilds[0].members
         for member in members:
             if user == member.display_name:
                 if member.avatar:
+                    logging.debug("Avatar found for %s", member.display_name)
                     return member.avatar.url
+        logging.debug("No avatar found for %s", user)
         return None
 
     async def accessible_channels(self, user_id: int):
