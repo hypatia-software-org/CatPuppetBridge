@@ -460,7 +460,8 @@ class DiscordBot(discord.Client):
             return
 
         user = self.guilds[0].get_member(message.author.id)
-        if not self.active_puppets or user.id not in self.active_puppets:
+
+        if user.id not in self.active_puppets:
             await self.activate_puppet(user)
 
         if isinstance(message.channel, discord.DMChannel):
