@@ -26,6 +26,7 @@ import threading
 import logging
 import time
 from queue import Queue
+import asyncio
 
 from modules.irc_bridge import IRCBot, IRCListener, IRCPuppet
 from modules.discord_bridge import DiscordBot
@@ -190,9 +191,9 @@ def main():
     }
 
     discord_queues = {
-        'irc_to_discord_queue': Queue(),
+        'irc_to_discord_queue': asyncio.Queue(),
         'puppet_queue': Queue(),
-        'dm_out_queue': Queue()
+        'dm_out_queue': asyncio.Queue()
     }
 
     threads = []

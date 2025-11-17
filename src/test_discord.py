@@ -35,16 +35,18 @@ users = []
 def create_fake_message(
         content = 'Hey whats up?',
         bot = False,
+        user = None,
         display_name = 'someuserdisplay',
         username = 'someusername',
         guild_id = 12345,
         message_reference_id = None):
     message = MagicMock()
     message.content = content
-    message.author = MagicMock()
+    if user:
+        message.author = user
+    else:
+        message.author = create_fake_user()
     message.author.bot = bot
-    message.author.display_name = display_name
-    message.author.name = username
     message.channel = AsyncMock()
     message.guild = Mock(spec=discord.Guild)
     message.guild.id = guild_id
@@ -55,16 +57,29 @@ def create_fake_message(
         message.reference = None
     return message
 
+async def fetch_user(user_id):
+    return get_user(user_id)
+
 def get_user(user_id):
     ret_val = None
     print('-----')
     print(user_id)
+    print(users)
     for user in users:
         print(user.id)
+        print(user.display_name)
         if user_id == user.id:
             ret_val = user
             break
     print('-----')
+    return ret_val
+
+def exists_user(user_id):
+    ret_val = False
+    for user in users:
+        if user_id == user.id:
+            ret_val = True
+            break
     return ret_val
 
 def create_fake_user(
@@ -92,7 +107,9 @@ def create_fake_user(
     display_avatar.url = avatar_url
     u.avatar = display_avatar
     u.status = status
-    users.append(u)
+
+    if not exists_user(id):
+        users.append(u)
     return u
 
 def reset_bot(bot):
@@ -109,7 +126,7 @@ def bot():
     real.message = AsyncMock()
     real.loop = AsyncMock()
     real.get_user = get_user
-    real.fetch_user = get_user
+    real.fetch_user = fetch_user
     real.data = StatsData()
 
     real.listener_config = {}
@@ -117,8 +134,9 @@ def bot():
     real.listener_config['puppet_min_size'] = 6
     real.queues = {}
     real.queues['puppet_queue'] = Queue()
-    real.queues['in_queue'] = Queue()
+    real.queues['in_queue'] = asyncio.Queue()
     real.get_user = get_user
+    real.guilds[0].get_member = get_user
 
     real.guilds[0].chunk = AsyncMock()
     real.guilds[0].members = [create_fake_user()]
@@ -126,7 +144,7 @@ def bot():
 
     channel = AsyncMock()
     message = AsyncMock()
-    bot.queues = {'puppet_queue': Queue(), 'in_queue': Queue()}
+    bot.queues = {'puppet_queue': Queue(), 'in_queue': asyncio.Queue()}
 
     yield real
     reset_bot(bot)
@@ -409,7 +427,7 @@ async def test_covert_discord_time(bot):
 @pytest.mark.asyncio
 async def test_on_message(bot):
     bot.ready = True
-    message = create_fake_message()
+    message = create_fake_message(user=create_fake_user(id=1))
     bot.discord_channel_mapping = {'123456': '#bots'}
 
     await bot.on_message(message)
@@ -426,7 +444,7 @@ async def test_on_message(bot):
 @pytest.mark.asyncio
 async def test_on_message_with_time(bot):
     bot.ready = True
-    message = create_fake_message(content = 'Hey lets meet at <t:1761385165:t>')
+    message = create_fake_message(user=create_fake_user(id=2), content = 'Hey lets meet at <t:1761385165:t>')
     bot.discord_channel_mapping = {'123456': '#bots'}
 
     await bot.on_message(message)
@@ -462,7 +480,7 @@ async def test_custom_emote_special(bot):
 
 @pytest.mark.asyncio
 async def test_mention_compile_new(bot):
-    user = create_fake_user()
+    user = create_fake_user(display_name='jimbob900')
 
     lookup_size = len(bot.filters.mention_lookup)
     await bot.filters.compile_mention_lookup_re(user)

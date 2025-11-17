@@ -23,6 +23,7 @@ from queue import Queue
 from unittest.mock import MagicMock, patch
 import logging
 from irc import server
+import asyncio
 
 from modules.irc_bridge import IRCBot, IRCListener, IRCPuppet
 
@@ -40,7 +41,7 @@ def reset_puppet(puppet):
     puppet.channels = ['1', '2', '3']
     puppet.discord_to_irc_links = {'1': '#test1', '2': "#test2", '3': "#bots",'4': '#new_channel'}
     puppet.connection.reset_mock()
-    puppet.queues = {'in_queue' : Queue(), 'out_queue': Queue()}
+    puppet.queues = {'in_queue' : Queue(), 'out_queue': asyncio.Queue()}
     puppet.ready = True
     return puppet
 
@@ -138,7 +139,8 @@ def test_puppet_join_part_no_change(puppet):
     assert puppet.channels == channels
     assert len(puppet.channels) == 3
 
-def test_puppet_on_privmsg(puppet):
+@pytest.mark.asyncio
+async def test_puppet_on_privmsg(puppet):
     """Test queuing out to discord queue from an IRC private message"""
     # Assert queue is empty
     assert puppet.queues['out_queue'].qsize() == 0
@@ -148,13 +150,16 @@ def test_puppet_on_privmsg(puppet):
     event.source = "TestUser!ident@host"
     event.arguments = ["So what's up gang?"]
 
-    puppet.on_privmsg(c, event)
+    import threading
+    t = threading.Thread(target=puppet.on_privmsg, args=[c, event])
+    t.start()
+    t.join()
 
     # Assert message has been added to queue
     assert puppet.queues['out_queue'].qsize() == 1
 
     # Assert data is correct
-    data = puppet.queues['out_queue'].get()
+    data = await puppet.queues['out_queue'].get()
     assert data['author'] == 'TestUser'
     assert data['channel'] == '123456'
     assert data['content'] == event.arguments[0]
