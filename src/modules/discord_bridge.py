@@ -21,11 +21,9 @@ Main thread for the DiscordBot part of the bridge
 import re
 import logging
 import time
-import queue
 import asyncio
 import emoji
 import discord
-import asyncio
 
 from modules.discord_filters import DiscordFilters
 

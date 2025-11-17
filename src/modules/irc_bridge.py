@@ -29,8 +29,6 @@ import ssl
 from datetime import timedelta
 import asyncio
 
-import itertools
-import more_itertools
 import psutil
 import irc.bot
 import irc.client
@@ -43,6 +41,7 @@ class BotTemplate(irc.bot.SingleServerIRCBot):
     reconnect_data = None
     ready = False
 
+    # pylint: disable=super-init-not-called
     def __init__(self):
         self.reactor = self.reactor_class()
         self.recon = irc.bot.ExponentialBackoff()
@@ -51,6 +50,7 @@ class BotTemplate(irc.bot.SingleServerIRCBot):
         self.dcc_connections = []
         self.log = logging.getLogger(self.__class__.__name__)
 
+    # pylint: disable=too-many-arguments,too-many-positional-arguments
     async def send_to_discord(self, author, channel, content, queue, error=False):
         """ Add events to the discord out queue """
         data = {
@@ -178,7 +178,8 @@ class IRCPuppet(BotTemplate):
                 content = "ERROR: User '" + user + "' not found, no such nick exists on irc!"
                 error = True
 
-                asyncio.run(self.send_to_discord(nickname, channel, content, self.queues['out_queue'], error=True))
+                asyncio.run(self.send_to_discord(nickname, channel, content,
+                                                 self.queues['out_queue'], error=error))
 
     def on_privmsg(self, c, event):
         """Process DMs and pass to discord user"""
@@ -228,7 +229,7 @@ class IRCPuppet(BotTemplate):
                         self.connection.privmsg(msg['channel'], message)
                 case 'die':
                     self.end_thread = True
-                    self.die('has left discord')
+                    self.end('has left discord')
                 case _:
                     self.log.error("ERROR: Queue command '%s' not found!", msg['command'])
 
@@ -316,7 +317,7 @@ class IRCPuppet(BotTemplate):
             "AWAY"
         )
 
-    def die(self, msg):
+    def end(self, msg):
         """Kill ourself"""
         self.log.debug('IRC Puppet dying, %s', self.config['nickname'])
         self.connection.disconnect(msg)
@@ -372,7 +373,8 @@ class IRCListener(BotTemplate):
         if not nickname.endswith(self.config['puppet_suffix']):
             self.log.debug("Irc message found, adding to queue")
 
-            asyncio.run(self.send_to_discord(nickname, event.target, event.arguments[0], self.out_queue))
+            asyncio.run(self.send_to_discord(nickname, event.target,
+                                             event.arguments[0], self.out_queue))
             self.data.increment('irc_messages')
 
     def start(self):
