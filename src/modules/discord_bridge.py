@@ -25,6 +25,7 @@ import queue
 import asyncio
 import emoji
 import discord
+import asyncio
 
 from modules.discord_filters import DiscordFilters
 
@@ -198,75 +199,82 @@ class DiscordBot(discord.Client):
         """Thread to process our incoming queue from IRC"""
         while True:
         # Periodically check the queue and send messages
+            msg = None
             try:
-                msg = self.queues['irc_to_discord_queue'].get(timeout=0.5)
-                channel = None
+                msg = self.queues['irc_to_discord_queue'].get_nowait()
+            except asyncio.QueueEmpty:
+                await asyncio.sleep(.01)
+                continue
 
-                if msg['channel'] in self.discord_channel_mapping:
-                    channel = self.discord_channel_mapping[msg['channel']]
+            channel = None
 
-                if channel:
-                    webhooks = await channel.webhooks()
-                    webhook_name = 'CatPuppetBridge'
-                    webhook = None
-                    logging.debug("Searching for webhook")
-                    for hook in webhooks:
-                        if hook.name == webhook_name:
-                            logging.debug("Reusing old webhook")
-                            webhook = hook
-                            break
-                    if webhook is None:
-                        logging.debug("Creating new webhook")
-                        webhook = await channel.create_webhook(name='CatPuppetBridge')
+            if msg['channel'] in self.discord_channel_mapping:
+                channel = self.discord_channel_mapping[msg['channel']]
 
-                    # detect mentions
-                    processed_message = msg['content']
-                    if self.filters.mention_lookup_re:
-                        processed_message = self.filters.lookup_mention(msg['content'])
-                    # Detect Avatar
-                    avatar = await self.find_avatar(msg['author'])
-                    if avatar is None:
-                        avatar = 'https://robohash.org/' + msg['author'] + '?set=set4'
-                    # Detect emojis
-                    processed_message = await self.replace_emojis(processed_message)
-                    try:
-                        await webhook.send(processed_message, username=msg['author'],
-                                           avatar_url=avatar)
-                    except discord.errors.HTTPException:
-                        logging.warning("HTTP Error sending webhook. Author: '%s' Message: '%s'",
-                                        msg['author'], processed_message)
-            except queue.Empty:
-                pass
+            if channel:
+                webhooks = await channel.webhooks()
+                webhook_name = 'CatPuppetBridge'
+                webhook = None
+                logging.debug("Searching for webhook")
+                for hook in webhooks:
+                    if hook.name == webhook_name:
+                        logging.debug("Reusing old webhook")
+                        webhook = hook
+                        break
+                if webhook is None:
+                    logging.debug("Creating new webhook")
+                    webhook = await channel.create_webhook(name='CatPuppetBridge')
+
+                # detect mentions
+                processed_message = msg['content']
+                if self.filters.mention_lookup_re:
+                    processed_message = self.filters.lookup_mention(msg['content'])
+                # Detect Avatar
+                avatar = await self.find_avatar(msg['author'])
+                if avatar is None:
+                    avatar = 'https://robohash.org/' + msg['author'] + '?set=set4'
+                # Detect emojis
+                processed_message = await self.replace_emojis(processed_message)
+                try:
+                    await webhook.send(processed_message, username=msg['author'],
+                                       avatar_url=avatar)
+                except discord.errors.HTTPException:
+                    logging.warning("HTTP Error sending webhook. Author: '%s' Message: '%s'",
+                                    msg['author'], processed_message)
             await asyncio.sleep(0.01)
 
     async def process_dm_queue(self):
         """Thread to process our incoming dm_queue from IRC private messages"""
         while True:
-        # Periodically check the queue and send messages
+            # Periodically check the queue and send messages
+            user = None
+            msg = None
             try:
-                msg = self.queues['dm_out_queue'].get(timeout=0.5)
-                user = None
-                if 'channel' in msg:
-                    user = await self.fetch_user(msg['channel'])
-                if user:
-                    # detect mentions
-                    processed_message = msg['content']
-                    if self.filters.mention_lookup_re:
-                        processed_message = self.filters.mention_lookup_re.sub(
-                            lambda match: self.filters.mention_lookup[match.group(0)].mention,
-                            msg['content'])
-                        if not msg['error']:
-                            processed_message = 'Message from ' + msg['author'] + ': ' +\
-                                processed_message
-                    try:
-                        await user.send(processed_message)
-                    except discord.errors.HTTPException as e:
-                        logging.debug(user)
-                        logging.debug(processed_message)
-                        logging.debug(msg)
-                        logging.debug(e)
-            except queue.Empty:
-                pass
+                msg = self.queues['dm_out_queue'].get_nowait()
+            except asyncio.QueueEmpty:
+                await asyncio.sleep(0.01)
+                continue
+
+            if 'channel' in msg:
+                user = await self.fetch_user(msg['channel'])
+            if user:
+                # detect mentions
+                processed_message = msg['content']
+                if self.filters.mention_lookup_re:
+                    processed_message = self.filters.mention_lookup_re.sub(
+                        lambda match: self.filters.mention_lookup[match.group(0)].mention,
+                        msg['content'])
+                    if not msg['error']:
+                        processed_message = 'Message from ' + msg['author'] + ': ' +\
+                            processed_message
+                try:
+                    await user.send(processed_message)
+                except discord.errors.HTTPException as e:
+                    logging.debug(user)
+                    logging.debug(processed_message)
+                    logging.debug(msg)
+                    logging.debug(e)
+
             await asyncio.sleep(0.01)
 
     async def replace_emojis(self, processed_message):
@@ -451,13 +459,13 @@ class DiscordBot(discord.Client):
            message.author.id == self.user.id:
             return
 
-        if not self.active_puppets or message.author.id not in self.active_puppets:
-            await self.activate_puppet(message.author)
+        user = self.guilds[0].get_member(message.author.id)
+        if not self.active_puppets or user.id not in self.active_puppets:
+            await self.activate_puppet(user)
 
         if isinstance(message.channel, discord.DMChannel):
             logging.debug("Discord bot received a DM, processing")
-            dm_user = self.guilds[0].get_member(message.author.id)
-            await self.do_process_dm(dm_user, message)
+            await self.do_process_dm(user, message)
             return
 
         content, attach = await self.parse_message_content(message)

@@ -27,27 +27,46 @@ import re
 import os
 import ssl
 from datetime import timedelta
+import asyncio
 
+import itertools
+import more_itertools
 import psutil
 import irc.bot
 import irc.client
 import irc.strings
 from irc.connection import Factory
 
-class BotTemplate(irc.client.SimpleIRCClient):
+class BotTemplate(irc.bot.SingleServerIRCBot):
     """ Shared IRC Bot functionality """
     log = None
     reconnect_data = None
     ready = False
 
     def __init__(self):
-        super().__init__()
+        self.reactor = self.reactor_class()
+        self.recon = irc.bot.ExponentialBackoff()
+        self.connection = None
+
+        self.dcc_connections = []
         self.log = logging.getLogger(self.__class__.__name__)
+
+    async def send_to_discord(self, author, channel, content, queue, error=False):
+        """ Add events to the discord out queue """
+        data = {
+            'author': author,
+            'channel': channel,
+            'content': content,
+            'error': error
+        }
+
+        await queue.put(data)
 
     def connect_and_retry(self, server: str, port: int, nickname: str, tls: bool = False):
         """ Manage connection and retry rate """
         retry_count = 1
         self.reconnect_data = {'server': server, 'port': port, 'nickname': nickname, 'tls': tls}
+
         while True:
             self.ready = False
             if tls == "yes":
@@ -59,9 +78,14 @@ class BotTemplate(irc.client.SimpleIRCClient):
                     wrapper=lambda sock: context.wrap_socket(sock,server_hostname=server))
 
                 try:
-                    self.connection = self.reactor.server().connect(
-                        server, port, nickname,
-                        connect_factory=ssl_factory)
+                    if self.connection:
+                        self.connect(
+                            server, port, nickname,
+                            connect_factory=ssl_factory)
+                    else:
+                        self.connection = self.reactor.server().connect(
+                            server, port, nickname,
+                            connect_factory=ssl_factory)
                     self.log.info('connected with TLS sucessfully to %s:%i',
                                  server, port)
                     self.log.debug('connected sucessfully to %s:%i as %s',
@@ -75,8 +99,12 @@ class BotTemplate(irc.client.SimpleIRCClient):
                     time.sleep(delay)
             else:
                 try:
-                    self.connection = self.reactor.server().connect(
-                        server, port, nickname)
+                    if self.connection:
+                        self.connect(server, port, nickname)
+                    else:
+                        self.connection = self.reactor.server().connect(
+                            server, port, nickname)
+
                     self.log.info('connected sucessfully to %s:%i',
                                  server, port)
                     self.log.debug('connected sucessfully to %s:%i as %s',
@@ -111,7 +139,6 @@ class IRCPuppet(BotTemplate):
     def __init__(self, queues, discord_to_irc_links, puppet_config,
                  config):
         super().__init__()
-        self.reactor = irc.client.Reactor()
 
         # TODO: ircname
         self.discord_id = puppet_config['discord_id']
@@ -145,26 +172,24 @@ class IRCPuppet(BotTemplate):
         if len(split_data) >= 4:
             if split_data[1] == "401":
                 user = split_data[3][1:]
-                data = {
-                    'author': 'NOSUCHNICK',
-                    'channel': self.config['nickname'],
-                    'content': "ERROR: User '" + user + "' not found, no such nick exists on irc!",
-                    'error': True
-                }
-                self.queues['out_queue'].put(data)
+
+                nickname = 'NOSUCHNICK'
+                channel = self.discord_id
+                content = "ERROR: User '" + user + "' not found, no such nick exists on irc!"
+                error = True
+
+                asyncio.run(self.send_to_discord(nickname, channel, content, self.queues['out_queue'], error=True))
 
     def on_privmsg(self, c, event):
         """Process DMs and pass to discord user"""
         self.log.debug("conext %s", c)
         self.log.debug("privmsg, attempting to process")
         nickname = event.source.split('!', 1)[0]
-        data = {
-            'author': nickname,
-            'channel': self.discord_id,
-            'content': event.arguments[0],
-            'error': False
-        }
-        self.queues['out_queue'].put(data)
+
+        channel = self.discord_id
+        content = event.arguments[0]
+
+        asyncio.run(self.send_to_discord(nickname, channel, content, self.queues['out_queue']))
 
     def do_send(self, msg):
         """ Handle sending messages from discord """
@@ -305,7 +330,6 @@ class IRCListener(BotTemplate):
 
     def __init__(self, out_queue, config, data):
         super().__init__()
-        self.reactor = irc.client.Reactor()
         self.config = config
         self.data = data
         # TODO: ircname
@@ -333,12 +357,13 @@ class IRCListener(BotTemplate):
         self.log.debug("conext %s", c)
         self.log.debug("event %s", event)
         nickname = event.source.split('!', 1)[0]
-        data = {
-            'author': nickname,
-            'channel': event.target,
-            'content': '*' + event.arguments[0] + '*'
-        }
-        self.out_queue.put(data)
+
+        content = '*' + event.arguments[0] + '*'
+
+        if not nickname.endswith(self.config['puppet_suffix']):
+            self.log.debug("Irc message found, adding to queue")
+            asyncio.run(self.send_to_discord(nickname, event.target, content, self.out_queue))
+            self.data.increment('irc_messages')
 
     def on_pubmsg(self, c, event):
         """On public messages, relay to discord"""
@@ -346,12 +371,8 @@ class IRCListener(BotTemplate):
         nickname = event.source.split('!', 1)[0]
         if not nickname.endswith(self.config['puppet_suffix']):
             self.log.debug("Irc message found, adding to queue")
-            data = {
-                'author': nickname,
-                'channel': event.target,
-                'content': event.arguments[0]
-            }
-            self.out_queue.put(data)
+
+            asyncio.run(self.send_to_discord(nickname, event.target, event.arguments[0], self.out_queue))
             self.data.increment('irc_messages')
 
     def start(self):
@@ -367,7 +388,6 @@ class IRCBot(BotTemplate):
 
     def __init__(self, config, data):
         super().__init__()
-        self.reactor = irc.client.Reactor()
         self.connect_and_retry(config['server'], config['port'], config['bot_nickname'],
                                config['tls'])
         self.channel = config['bot_channel']
@@ -435,3 +455,8 @@ class IRCBot(BotTemplate):
             c.privmsg(nick, "Uptime: " + uptime)
         else:
             c.privmsg(nick, "Not understood: " + cmd)
+
+    def start(self):
+        """Start the irc loop, forever"""
+        self.log.debug("Starting IRC client loop...")
+        self.reactor.process_forever()
