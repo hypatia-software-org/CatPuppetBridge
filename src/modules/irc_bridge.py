@@ -27,74 +27,34 @@ import re
 import os
 import ssl
 from datetime import timedelta
+import asyncio
 
 import psutil
 import irc.bot
-import irc.client
+import irc.client_aio
 import irc.strings
 from irc.connection import Factory
 
-class BotTemplate(irc.client.SimpleIRCClient):
+class BotTemplate(irc.client_aio.AioSimpleIRCClient):
     """ Shared IRC Bot functionality """
     log = None
-    reconnect_data = None
     ready = False
 
     def __init__(self):
         super().__init__()
+
+        if 'tls' in self.config:
+            if self.config['tls'] == 'yes':
+                self.config['tls'] = True
+            else:
+                self.config['tls'] = False
+
         self.log = logging.getLogger(self.__class__.__name__)
 
-    def connect_and_retry(self, server: str, port: int, nickname: str, tls: bool = False):
-        """ Manage connection and retry rate """
-        retry_count = 1
-        self.reconnect_data = {'server': server, 'port': port, 'nickname': nickname, 'tls': tls}
-        while True:
-            self.ready = False
-            if tls == "yes":
-                context = ssl.create_default_context(ssl.Purpose.SERVER_AUTH)
-                context.check_hostname = False
-                context.verify_mode = ssl.CERT_NONE
-                context.minimum_version = ssl.TLSVersion.TLSv1_2
-                ssl_factory = Factory(
-                    wrapper=lambda sock: context.wrap_socket(sock,server_hostname=server))
-
-                try:
-                    self.connection = self.reactor.server().connect(
-                        server, port, nickname,
-                        connect_factory=ssl_factory)
-                    self.log.info('connected with TLS sucessfully to %s:%i',
-                                 server, port)
-                    self.log.debug('connected sucessfully to %s:%i as %s',
-                                  server, port, nickname)
-                    break
-                except (irc.client.ServerConnectionError, TimeoutError):
-                    delay = min(10 * retry_count, 300)
-                    self.log.warning('connection failed %i times on %s:%i, retrying in %i',
-                                 retry_count, server, port, delay)
-                    retry_count = retry_count + 1
-                    time.sleep(delay)
-            else:
-                try:
-                    self.connection = self.reactor.server().connect(
-                        server, port, nickname)
-                    self.log.info('connected sucessfully to %s:%i',
-                                 server, port)
-                    self.log.debug('connected sucessfully to %s:%i as %s',
-                                  server, port, nickname)
-                    break
-                except (irc.client.ServerConnectionError, TimeoutError):
-                    delay = min(10 * retry_count, 300)
-                    self.log.warning('connection failed %i times on %s:%i, retrying in %i',
-                                 retry_count, server, port, delay)
-                    retry_count = retry_count + 1
-                    time.sleep(delay)
-
-        self.connection.add_global_handler("disconnect", self.on_disconnect)
-
-    def on_disconnect(self, c, e):
+    async def on_disconnect(self, c, e):
         """ When disconnected, try to reconnect """
         self.log.debug("event %s context %s", e, c)
-        self.connect_and_retry(self.reconnect_data['server'], self.reconnect_data['port'],
+        await self.connect(self.reconnect_data['server'], self.reconnect_data['port'],
                                self.reconnect_data['nickname'], self.reconnect_data['tls'])
 
 # pylint: disable=too-many-instance-attributes
@@ -110,24 +70,25 @@ class IRCPuppet(BotTemplate):
 
     def __init__(self, queues, discord_to_irc_links, puppet_config,
                  config):
+        self.config = dict(config)
         super().__init__()
-        self.reactor = irc.client.Reactor()
-
+        print("PUPPET CREATED")
         # TODO: ircname
         self.discord_id = puppet_config['discord_id']
         self.queues = queues
         self.channels = puppet_config['channels']
         self.discord_to_irc_links = discord_to_irc_links
 
-        self.config = dict(config)
         self.config.update(puppet_config)
         self.config['webirc_hostname'] = 'discord.bridge'
         self.end_thread = False
 
-        self.connect_and_retry(self.config['server'], self.config['port'], self.config['nickname'],
+    async def start(self):
+        print("CONNECT AND RETRY RUN")
+        await self.connect(self.config['server'], self.config['port'], self.config['nickname'],
                                self.config['tls'])
 
-        self.connection.send_raw(
+        await self.connection.send_raw(
                 f"WEBIRC {self.config['webirc_password']} {self.config['webirc_hostname']}"
                 f" {self.config['webirc_hostname']} {self.config['webirc_ip']}"
             )
@@ -135,6 +96,7 @@ class IRCPuppet(BotTemplate):
         self.connection.add_global_handler("welcome", self.on_welcome)
         self.connection.add_global_handler("privmsg", self.on_privmsg)
         self.connection.add_global_handler("all_raw_messages", self.on_raw)
+        asyncio.create_task(self.process_forever())
 
     def on_raw(self, c, event):
         """ Process special messages such has 401/NOSUCHNICK """
@@ -177,12 +139,13 @@ class IRCPuppet(BotTemplate):
                 self.connection.privmsg(
                     self.discord_to_irc_links[str(msg['channel'])], message)
 
-    def process_discord_queue(self):
+    async def process_discord_queue(self):
         """Main worker thread for handling commands form discord"""
         sentinel = object()
-        for msg in iter(self.queues['in_queue'].get, sentinel):
+        while True:
+            msg = await self.queues['in_queue'].get()
             while not self.ready:
-                time.sleep(1)
+                await asyncio.sleep(0.1)
 
             self.log.debug("Processing command %s", msg)
             match msg['command']:
@@ -226,11 +189,7 @@ class IRCPuppet(BotTemplate):
         for channel in self.channels:
             self.log.debug("Puppet Joining %s", self.discord_to_irc_links[str(channel)])
             c.join(self.discord_to_irc_links[str(channel)])
-        #self.reactor.scheduler.execute_every(1, self.process_discord_queue)
-        if not self.queue_thread:
-            self.log.debug("starting process_discord_queue thread from puppet")
-            self.queue_thread = threading.Thread(target=self.process_discord_queue, daemon=True)
-            self.queue_thread.start()
+        asyncio.create_task(self.process_discord_queue())
         c.mode(c.get_nickname(), "+R")
         self.ready = True
 
@@ -270,15 +229,6 @@ class IRCPuppet(BotTemplate):
         c.nick(c.get_nickname() + "_")
         self.config['nickname'] = c.get_nickname()
 
-    def start(self):
-        """Start the IRC Puppet loop"""
-        self.log.debug("Starting IRC puppet loop for puppet %s", self.config['nickname'])
-        while not self.end_thread:
-            self.reactor.process_once(timeout=0.2)
-        self.log.debug('IRC Puppet killing main thread, %s', self.config['nickname'])
-        sys.exit(0)
-        #self.reactor.process_forever()
-
     def afk(self):
         """Mark nickname as afk"""
         self.connection.send_raw(
@@ -304,23 +254,29 @@ class IRCListener(BotTemplate):
     channels = None
 
     def __init__(self, out_queue, config, data):
-        super().__init__()
-        self.reactor = irc.client.Reactor()
         self.config = config
+        super().__init__()
         self.data = data
         # TODO: ircname
-        self.connect_and_retry(self.config['server'], self.config['port'],
-                               self.config['listener_nickname'],
-                               self.config['tls'])
 
         self.out_queue = out_queue
+        self.channels = config['channels']
+
+    async def start(self):
+        await self.connect(self.config['server'], self.config['port'],
+                               self.config['listener_nickname'],
+                               self.config['tls'])
         self.connection.add_global_handler("welcome", self.on_welcome)
         self.connection.add_global_handler("pubmsg", self.on_pubmsg)
         self.connection.add_global_handler("action", self.on_action)
 
-        self.channels = config['channels']
+        asyncio.create_task(self.process_forever())
 
     def on_welcome(self, c, e):
+        print("Conn object:", id(self.connection))
+        print("Connection object (event):", id(c))
+        print("Connection object (self):", id(self.connection))
+
         """On IRCd welcome, join channels"""
         for channel in self.channels:
             self.log.debug("Listener joining %s", channel)
@@ -343,6 +299,7 @@ class IRCListener(BotTemplate):
     def on_pubmsg(self, c, event):
         """On public messages, relay to discord"""
         self.log.debug("c %s", c)
+        print('i ran')
         nickname = event.source.split('!', 1)[0]
         if not nickname.endswith(self.config['puppet_suffix']):
             self.log.debug("Irc message found, adding to queue")
@@ -354,27 +311,27 @@ class IRCListener(BotTemplate):
             self.out_queue.put(data)
             self.data.increment('irc_messages')
 
-    def start(self):
-        """Start the irc loop, forever"""
-        self.log.debug("Starting IRC client loop...")
-        self.reactor.process_forever()
-
 class IRCBot(BotTemplate):
     """Generic bot for running admin commands on the bridge from IRC"""
 
     channels = None
     stats_data = None
+    config = None
 
     def __init__(self, config, data):
+        self.config = config
         super().__init__()
-        self.reactor = irc.client.Reactor()
-        self.connect_and_retry(config['server'], config['port'], config['bot_nickname'],
-                               config['tls'])
         self.channel = config['bot_channel']
         self.stats_data = data
+
+    async def start(self):
+        await self.connect(self.config['server'], self.config['port'], self.config['bot_nickname'],
+                               self.config['tls'])
         self.connection.add_global_handler("welcome", self.on_welcome)
         self.connection.add_global_handler("pubmsg", self.on_pubmsg)
         self.connection.add_global_handler("privmsg", self.on_privmsg)
+
+        asyncio.create_task(self.process_forever())
 
     def on_nicknameinuse(self, c, e):
         """Run if nickname is already in use"""
