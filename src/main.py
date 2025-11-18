@@ -191,9 +191,9 @@ async def main():
     }
 
     discord_queues = {
-        'irc_to_discord_queue': Queue(),
+        'irc_to_discord_queue': asyncio.Queue(),
         'puppet_queue': asyncio.Queue(),
-        'dm_out_queue': Queue()
+        'dm_out_queue': asyncio.Queue()
     }
 
 
