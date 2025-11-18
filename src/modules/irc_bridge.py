@@ -233,6 +233,7 @@ class IRCPuppet(BotTemplate):
                 case 'die':
                     self.end_thread = True
                     self.end('has left discord')
+                    break
                 case _:
                     self.log.error("ERROR: Queue command '%s' not found!", msg['command'])
 
@@ -256,7 +257,7 @@ class IRCPuppet(BotTemplate):
             self.log.debug("Puppet Joining %s", self.discord_to_irc_links[str(channel)])
             c.join(self.discord_to_irc_links[str(channel)])
         asyncio.create_task(self.process_discord_queue())
-        c.mode(c.get_nickname(), "+R")
+#        c.mode(c.get_nickname(), "+R")
         self.ready = True
 
     def msg_reserved_bytes(self, target):
@@ -311,7 +312,6 @@ class IRCPuppet(BotTemplate):
         """Kill ourself"""
         self.log.debug('IRC Puppet dying, %s', self.config['nickname'])
         self.connection.disconnect(msg)
-        sys.exit(0)
 
 class IRCListener(BotTemplate):
     """Listener for irc to discord traffic"""
@@ -455,7 +455,3 @@ class IRCBot(BotTemplate):
             c.privmsg(nick, "Uptime: " + uptime)
         else:
             c.privmsg(nick, "Not understood: " + cmd)
-
-    async def start(self):
-        """Start the irc loop, forever"""
-        self.log.debug("Starting IRC client loop...")

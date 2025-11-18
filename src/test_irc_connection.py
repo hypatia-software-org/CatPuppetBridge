@@ -25,10 +25,10 @@ import ssl
 import socket
 from modules.stats_data import StatsData
 from irc import client
+import asyncio
 
 from modules.irc_bridge import IRCBot, IRCListener, IRCPuppet
 import threading
-from queue import Queue
 
 def say_hi_and_quit(server: str = 'localhost', port: int = 6667, nickname: str = 'test', channel: str = "#bots", use_ssl: bool = False):
     """Connect to an IRC server, join a channel, and say hi using the irc library."""
@@ -157,9 +157,9 @@ def irc_server():
 @pytest.fixture(scope="session", autouse=True)
 def discord_queues():
     return {
-        'irc_to_discord_queue': Queue(),
-        'puppet_queue': Queue(),
-        'dm_out_queue': Queue()
+        'irc_to_discord_queue': asyncio.Queue(),
+        'puppet_queue': asyncio.Queue(),
+        'dm_out_queue': asyncio.Queue()
     }
 
 @pytest.fixture(scope="session", autouse=True)
@@ -184,11 +184,12 @@ def irc_config_ssl():
         'puppet_suffix': '_d2'
     }
 
-def test_irc_server_connection_plain(discord_queues, irc_config, irc_server):
+
+@pytest.mark.asyncio
+async def test_irc_server_connection_plain(discord_queues, irc_config, irc_server):
     data = StatsData()
-    thread = threading.Thread(target=main.run_irclistener,
-                              args=[discord_queues['irc_to_discord_queue'],
-                                    irc_config, data], daemon=True).start()
+    await main.run_irclistener(discord_queues['irc_to_discord_queue'],
+                                    irc_config, data)
     output = irc_server.stdout.readline().strip()
     assert "Client connected" in output
     

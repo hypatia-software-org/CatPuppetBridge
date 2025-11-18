@@ -210,10 +210,10 @@ async def main():
                                           discord_config, stats_data],
                                     daemon=True).start())
 
-    logging.info("starting IRC bot thread")
+    logging.info("starting IRC bot task")
     await run_ircbot(irc_config, stats_data)
 
-    logging.info("starting IRC listener thread")
+    logging.info("starting IRC listener task")
     await run_irclistener(discord_queues['irc_to_discord_queue'],
                     irc_config, stats_data)
 
@@ -237,7 +237,7 @@ async def main():
                     'webirc_ip': ula_address_from_string(puppet_nickname),
                     'discord_id': user['id']
                     }
-                ircpuppet_thread = await run_ircpuppet(
+                ircpuppet_task = await run_ircpuppet(
                     {
                         'in_queue': puppet_main_queues[user['id']],
                         'out_queue': discord_queues['dm_out_queue']
@@ -247,7 +247,7 @@ async def main():
 
                 stats_data.increment('total_puppets')
 
-                puppet_dict[user['id']] = ircpuppet_thread
+                puppet_dict[user['id']] = ircpuppet_task
         elif user['command'] == 'die':
             logging.debug("stopping IRC Puppet: %s", user['irc_nick'])
             logging.info("stopping IRC Puppet")
