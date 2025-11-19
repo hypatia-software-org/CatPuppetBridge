@@ -25,7 +25,6 @@ import os.path
 import threading
 import logging
 import time
-from queue import Queue
 import asyncio
 
 from modules.irc_bridge import IRCBot, IRCListener, IRCPuppet

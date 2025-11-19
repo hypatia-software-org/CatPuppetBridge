@@ -19,8 +19,6 @@ Threads for IRC Bot, Puppet, and Listener
 """
 
 
-import sys
-import threading
 import logging
 import time
 import re
@@ -33,12 +31,13 @@ import psutil
 import irc.bot
 import irc.client_aio
 import irc.strings
-from irc.connection import Factory
+from irc.connection import AioFactory
 
 class BotTemplate(irc.client_aio.AioSimpleIRCClient):
     """ Shared IRC Bot functionality """
     log = None
     ready = False
+    reconnect_data = None
 
     # pylint: disable=super-init-not-called
     def __init__(self):
@@ -74,15 +73,16 @@ class BotTemplate(irc.client_aio.AioSimpleIRCClient):
                 context.check_hostname = False
                 context.verify_mode = ssl.CERT_NONE
                 context.minimum_version = ssl.TLSVersion.TLSv1_2
-                ssl_factory = Factory(
-                    wrapper=lambda sock: context.wrap_socket(sock,server_hostname=server))
+                ssl_factory = AioFactory(ssl=context)
 
                 try:
                     if self.connection:
+                        print("IRAN4")
                         await self.connect(
                             server, port, nickname,
                             connect_factory=ssl_factory)
                     else:
+                        print("IRAN3")
                         self.connection = await self.reactor.server().connect(
                             server, port, nickname,
                             connect_factory=ssl_factory)
@@ -90,6 +90,7 @@ class BotTemplate(irc.client_aio.AioSimpleIRCClient):
                                  server, port)
                     self.log.debug('connected sucessfully to %s:%i as %s',
                                   server, port, nickname)
+                    print("IRAN")
                     break
                 except (irc.client.ServerConnectionError, TimeoutError):
                     delay = min(10 * retry_count, 300)
@@ -122,8 +123,10 @@ class BotTemplate(irc.client_aio.AioSimpleIRCClient):
     def on_disconnect(self, c, e):
         """ When disconnected, try to reconnect """
         self.log.debug("event %s context %s", e, c)
-        asyncio.create_task(self.connect_and_retry(self.reconnect_data['server'], self.reconnect_data['port'],
-                               self.reconnect_data['nickname'], self.reconnect_data['tls']))
+        asyncio.create_task(self.connect_and_retry(self.reconnect_data['server'],
+                                                   self.reconnect_data['port'],
+                                                   self.reconnect_data['nickname'],
+                                                   self.reconnect_data['tls']))
 
 # pylint: disable=too-many-instance-attributes
 class IRCPuppet(BotTemplate):
@@ -150,9 +153,12 @@ class IRCPuppet(BotTemplate):
         self.config['webirc_hostname'] = 'discord.bridge'
         self.end_thread = False
 
+    # pylint: disable=invalid-overridden-method
     async def start(self):
-        await self.connect_and_retry(self.config['server'], self.config['port'], self.config['nickname'],
-                               self.config['tls'])
+        await self.connect_and_retry(self.config['server'],
+                                     self.config['port'],
+                                     self.config['nickname'],
+                                     self.config['tls'])
 
         self.connection.send_raw(
                 f"WEBIRC {self.config['webirc_password']} {self.config['webirc_hostname']}"
@@ -190,7 +196,10 @@ class IRCPuppet(BotTemplate):
         channel = self.discord_id
         content = event.arguments[0]
 
-        asyncio.create_task(self.send_to_discord(nickname, channel, content, self.queues['out_queue']))
+        asyncio.create_task(self.send_to_discord(nickname,
+                                                 channel,
+                                                 content,
+                                                 self.queues['out_queue']))
 
     def do_send(self, msg):
         """ Handle sending messages from discord """
@@ -205,7 +214,6 @@ class IRCPuppet(BotTemplate):
 
     async def process_discord_queue(self):
         """Main worker thread for handling commands form discord"""
-        sentinel = object()
         while True:
             msg = await self.queues['in_queue'].get()
             while not self.ready:
@@ -327,10 +335,13 @@ class IRCListener(BotTemplate):
         self.out_queue = out_queue
         self.channels = config['channels']
 
+    # pylint: disable=invalid-overridden-method
     async def start(self):
+        print("IRAN")
         await self.connect_and_retry(self.config['server'], self.config['port'],
                                self.config['listener_nickname'],
                                self.config['tls'])
+        print("IRAN2")
         self.connection.add_global_handler("welcome", self.on_welcome)
         self.connection.add_global_handler("pubmsg", self.on_pubmsg)
         self.connection.add_global_handler("action", self.on_action)
@@ -354,7 +365,8 @@ class IRCListener(BotTemplate):
 
         if not nickname.endswith(self.config['puppet_suffix']):
             self.log.debug("Irc message found, adding to queue")
-            asyncio.create_task(self.send_to_discord(nickname, event.target, content, self.out_queue))
+            asyncio.create_task(self.send_to_discord(nickname, event.target,
+                                                     content, self.out_queue))
             self.data.increment('irc_messages')
 
     def on_pubmsg(self, c, event):
@@ -382,9 +394,10 @@ class IRCBot(BotTemplate):
         self.channel = config['bot_channel']
         self.stats_data = data
 
+    # pylint: disable=invalid-overridden-method
     async def start(self):
-        await self.connect_and_retry(self.config['server'], self.config['port'], self.config['bot_nickname'],
-                               self.config['tls'])
+        await self.connect_and_retry(self.config['server'], self.config['port'],
+                                     self.config['bot_nickname'], self.config['tls'])
         self.connection.add_global_handler("welcome", self.on_welcome)
         self.connection.add_global_handler("pubmsg", self.on_pubmsg)
         self.connection.add_global_handler("privmsg", self.on_privmsg)
