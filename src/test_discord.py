@@ -113,7 +113,7 @@ def create_fake_user(
     return u
 
 def reset_bot(bot):
-    bot.queues['puppet_queue'] = Queue()
+    bot.queues['puppet_queue'] = asyncio.Queue()
 
 
 @pytest.fixture
@@ -132,9 +132,6 @@ def bot():
     real.listener_config = {}
     real.listener_config['puppet_suffix'] = '_d2'
     real.listener_config['puppet_min_size'] = 6
-    real.queues = {}
-    real.queues['puppet_queue'] = Queue()
-    real.queues['in_queue'] = asyncio.Queue()
     real.get_user = get_user
     real.guilds[0].get_member = get_user
 
@@ -144,10 +141,11 @@ def bot():
 
     channel = AsyncMock()
     message = AsyncMock()
-    bot.queues = {'puppet_queue': Queue(), 'in_queue': asyncio.Queue()}
+    real.queues = {}
+    real.queues = {'puppet_queue': asyncio.Queue(), 'in_queue': asyncio.Queue()}
 
     yield real
-    reset_bot(bot)
+    reset_bot(real)
 
 def test_on_irc_safe_nickname(bot):
     nickname = bot.irc_safe_nickname('This is a really long name with spaces 😍')
@@ -182,13 +180,13 @@ async def test_on_member_update(bot):
     await bot.activate_puppet(user_before)
 
     # "Fake process" the activation, removing it from queue
-    data = bot.queues['puppet_queue'].get(False)
+    data = await bot.queues['puppet_queue'].get()
 
     await bot.on_member_update(user_before, user_after)
     assert bot.queues['puppet_queue'].qsize() == 1
 
 
-    data = bot.queues['puppet_queue'].get(False)
+    data = await bot.queues['puppet_queue'].get()
     assert data['display_name'] == 'name_b'
     assert data['irc_nick'] == 'name_b[TestUser]'
     assert data['name'] == 'TestUser'
@@ -208,13 +206,13 @@ async def test_on_presence_update_online_to_offline(bot):
     await bot.activate_puppet(user_before)
 
     # "Fake process" the activation, removing it from queue
-    data = bot.queues['puppet_queue'].get(False)
+    data = await bot.queues['puppet_queue'].get()
 
     await bot.on_presence_update(user_before, user_after)
     
     assert bot.queues['puppet_queue'].qsize() == 1
 
-    data = bot.queues['puppet_queue'].get(False)
+    data = await bot.queues['puppet_queue'].get()
     assert data['command'] == 'afk'
 
 @pytest.mark.filterwarnings("ignore:coroutine 'AsyncMockMixin._execute_mock_call' was never awaited:RuntimeWarning")
@@ -231,13 +229,13 @@ async def test_on_presence_update_online_to_dnd(bot):
     await bot.activate_puppet(user_before)
 
     # "Fake process" the activation, removing it from queue
-    data = bot.queues['puppet_queue'].get(False)
+    data = await bot.queues['puppet_queue'].get()
 
     await bot.on_presence_update(user_before, user_after)
     
     assert bot.queues['puppet_queue'].qsize() == 1
 
-    data = bot.queues['puppet_queue'].get(False)
+    data = await bot.queues['puppet_queue'].get()
     assert data['command'] == 'afk'
 
 @pytest.mark.filterwarnings("ignore:coroutine 'AsyncMockMixin._execute_mock_call' was never awaited:RuntimeWarning")
@@ -254,13 +252,13 @@ async def test_on_presence_update_offline_to_idle(bot):
     await bot.activate_puppet(user_before)
 
     # "Fake process" the activation, removing it from queue
-    data = bot.queues['puppet_queue'].get(False)
+    data = await bot.queues['puppet_queue'].get()
 
     await bot.on_presence_update(user_before, user_after)
     
     assert bot.queues['puppet_queue'].qsize() == 1
 
-    data = bot.queues['puppet_queue'].get(False)
+    data = await bot.queues['puppet_queue'].get()
     assert data['command'] == 'unafk'
 
 @pytest.mark.filterwarnings("ignore:coroutine 'AsyncMockMixin._execute_mock_call' was never awaited:RuntimeWarning")
@@ -277,13 +275,13 @@ async def test_on_presence_update_offline_to_online(bot):
     await bot.activate_puppet(user_before)
 
     # "Fake process" the activation, removing it from queue
-    data = bot.queues['puppet_queue'].get(False)
+    data = await bot.queues['puppet_queue'].get()
 
     await bot.on_presence_update(user_before, user_after)
     
     assert bot.queues['puppet_queue'].qsize() == 1
 
-    data = bot.queues['puppet_queue'].get(False)
+    data = await bot.queues['puppet_queue'].get()
     assert data['command'] == 'unafk'
 
 @pytest.mark.filterwarnings("ignore:coroutine 'AsyncMockMixin._execute_mock_call' was never awaited:RuntimeWarning")
@@ -300,13 +298,13 @@ async def test_on_presence_update_dnd_to_online(bot):
     await bot.activate_puppet(user_before)
 
     # "Fake process" the activation, removing it from queue
-    data = bot.queues['puppet_queue'].get(False)
+    data = await bot.queues['puppet_queue'].get()
 
     await bot.on_presence_update(user_before, user_after)
     
     assert bot.queues['puppet_queue'].qsize() == 1
 
-    data = bot.queues['puppet_queue'].get(False)
+    data = await bot.queues['puppet_queue'].get()
     assert data['command'] == 'unafk'
 
 @pytest.mark.filterwarnings("ignore:coroutine 'AsyncMockMixin._execute_mock_call' was never awaited:RuntimeWarning")
@@ -323,7 +321,7 @@ async def test_on_presence_update_offline_to_dnd(bot):
     await bot.activate_puppet(user_before)
 
     # "Fake process" the activation, removing it from queue
-    data = bot.queues['puppet_queue'].get(False)
+    data = await bot.queues['puppet_queue'].get()
 
     await bot.on_presence_update(user_before, user_after)
     
@@ -343,7 +341,7 @@ async def test_on_presence_update_online_to_idle(bot):
     await bot.activate_puppet(user_before)
 
     # "Fake process" the activation, removing it from queue
-    data = bot.queues['puppet_queue'].get(False)
+    data = await bot.queues['puppet_queue'].get()
 
     await bot.on_presence_update(user_before, user_after)
     
@@ -362,13 +360,13 @@ async def test_on_member_remove(bot):
     await bot.activate_puppet(user)
 
     # "Fake process" the activation, removing it from queue
-    data = bot.queues['puppet_queue'].get(False)
+    data = await bot.queues['puppet_queue'].get()
 
     await bot.on_member_remove(user)
     
     assert bot.queues['puppet_queue'].qsize() == 1
 
-    data = bot.queues['puppet_queue'].get(False)
+    data = await bot.queues['puppet_queue'].get()
     assert data['command'] == 'die'
 
 @pytest.mark.filterwarnings("ignore:coroutine 'AsyncMockMixin._execute_mock_call' was never awaited:RuntimeWarning")
@@ -433,11 +431,11 @@ async def test_on_message(bot):
     await bot.on_message(message)
 
     assert bot.queues['puppet_queue'].qsize() == 2
-    data = bot.queues['puppet_queue'].get(False)
+    data = await bot.queues['puppet_queue'].get()
     assert data['command'] == 'active'
 
     assert bot.queues['puppet_queue'].qsize() == 1
-    data = bot.queues['puppet_queue'].get(False)
+    data = await bot.queues['puppet_queue'].get()
     assert data['command'] == 'send'
     assert data['data'] == message.content
 
@@ -450,11 +448,11 @@ async def test_on_message_with_time(bot):
     await bot.on_message(message)
 
     assert bot.queues['puppet_queue'].qsize() == 2
-    data = bot.queues['puppet_queue'].get(False)
+    data = await bot.queues['puppet_queue'].get()
     assert data['command'] == 'active'
 
     assert bot.queues['puppet_queue'].qsize() == 1
-    data = bot.queues['puppet_queue'].get(False)
+    data = await bot.queues['puppet_queue'].get()
     assert data['command'] == 'send'
     assert data['data'] == 'Hey lets meet at 09:39'
 

@@ -163,7 +163,7 @@ class DiscordBot(discord.Client):
     async def send_irc_command(self, user, command, data=None, channel=None):
         """Send a command to an IRC Puppet"""
         logging.debug('adding cmd to queue from discord: %s',command)
-        self.queues['puppet_queue'].put({
+        await self.queues['puppet_queue'].put({
             'nick': self.irc_safe_nickname(user.display_name),
             'display_name': user.display_name,
             'irc_nick': await self.generate_irc_nickname(user),

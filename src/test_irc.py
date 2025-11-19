@@ -41,7 +41,7 @@ def reset_puppet(puppet):
     puppet.channels = ['1', '2', '3']
     puppet.discord_to_irc_links = {'1': '#test1', '2': "#test2", '3': "#bots",'4': '#new_channel'}
     puppet.connection.reset_mock()
-    puppet.queues = {'in_queue' : Queue(), 'out_queue': asyncio.Queue()}
+    puppet.queues = {'in_queue' : asyncio.Queue(), 'out_queue': asyncio.Queue()}
     puppet.ready = True
     return puppet
 
@@ -150,70 +150,67 @@ async def test_puppet_on_privmsg(puppet):
     event.source = "TestUser!ident@host"
     event.arguments = ["So what's up gang?"]
 
-    import threading
-    t = threading.Thread(target=puppet.on_privmsg, args=[c, event])
-    t.start()
-    t.join()
+    puppet.on_privmsg(c, event)
 
-    # Assert message has been added to queue
-    assert puppet.queues['out_queue'].qsize() == 1
 
     # Assert data is correct
     data = await puppet.queues['out_queue'].get()
+
     assert data['author'] == 'TestUser'
     assert data['channel'] == '123456'
     assert data['content'] == event.arguments[0]
 
-def test_puppet_process_discord_queue_afk(puppet): 
+@pytest.mark.asyncio
+async def test_puppet_process_discord_queue_afk(puppet): 
     """Test if inbound queue receives "AFK" and processes it"""
     msg = {}
     msg['command'] = 'afk'
-    puppet.queues['in_queue'].put(msg)
+    await puppet.queues['in_queue'].put(msg)
 
     # needed to break the loop
     msg2 = {}
     msg2['command'] = 'die'
-    puppet.queues['in_queue'].put(msg2)
+    await puppet.queues['in_queue'].put(msg2)
 
-    with pytest.raises(SystemExit):
-        puppet.process_discord_queue()
+    await puppet.process_discord_queue()
 
     puppet.connection.send_raw.assert_called_once_with("AWAY User is away on discord")
 
-def test_puppet_process_discord_queue_unafk(puppet): 
+@pytest.mark.asyncio
+async def test_puppet_process_discord_queue_unafk(puppet): 
     """Test if inbound queue receives "UNAFK" and processes it"""
     msg = {}
     msg['command'] = 'unafk'
-    puppet.queues['in_queue'].put(msg)
+    await puppet.queues['in_queue'].put(msg)
 
     # needed to break the loop
     msg2 = {}
     msg2['command'] = 'die'
-    puppet.queues['in_queue'].put(msg2)
+    await puppet.queues['in_queue'].put(msg2)
 
-    with pytest.raises(SystemExit):
-        puppet.process_discord_queue()
+    await puppet.process_discord_queue()
 
     puppet.connection.send_raw.assert_called_once_with("AWAY")
 
-def test_puppet_process_discord_queue_nick(puppet): 
+@pytest.mark.asyncio
+async def test_puppet_process_discord_queue_nick(puppet): 
     """Test if inbound queue receives "nick" and processes it"""
     msg = {}
     msg['command'] = 'nick'
     msg['irc_nick'] = 'newNick[newUsername]_d2'
-    puppet.queues['in_queue'].put(msg)
+    await puppet.queues['in_queue'].put(msg)
 
     # needed to break the loop
     msg2 = {}
     msg2['command'] = 'die'
-    puppet.queues['in_queue'].put(msg2)
+    await puppet.queues['in_queue'].put(msg2)
 
-    with pytest.raises(SystemExit):
-        puppet.process_discord_queue()
+    await puppet.process_discord_queue()
 
     puppet.connection.nick.assert_called_once_with(msg['irc_nick'])
 
-def test_puppet_process_discord_queue_join(puppet): 
+@pytest.mark.asyncio
+async def test_puppet_process_discord_queue_join(puppet): 
     """Test if inbound queue receives "join_part" and processes it to join a channel"""
     msg = {}
     msg['command'] = 'join_part'
@@ -221,57 +218,56 @@ def test_puppet_process_discord_queue_join(puppet):
     channels = puppet.channels.copy()
     channels.append(new_channel)
     msg['data'] = channels
-    puppet.queues['in_queue'].put(msg)
+    await puppet.queues['in_queue'].put(msg)
 
     # needed to break the loop
     msg2 = {}
     msg2['command'] = 'die'
-    puppet.queues['in_queue'].put(msg2)
+    await puppet.queues['in_queue'].put(msg2)
 
-    with pytest.raises(SystemExit):
-        puppet.process_discord_queue()
+    await puppet.process_discord_queue()
 
     puppet.connection.join.assert_called_once_with(puppet.discord_to_irc_links[str(new_channel)])
     assert puppet.channels == channels
     assert new_channel in channels
     assert len(puppet.channels) == 4
-    
-def test_puppet_process_discord_queue_part(puppet): 
+
+@pytest.mark.asyncio
+async def test_puppet_process_discord_queue_part(puppet): 
     """Test if inbound queue receives "join_part" and processes it to part a channel"""
     msg = {}
     msg['command'] = 'join_part'
     channels = puppet.channels.copy()
     channels.remove('2')
     msg['data'] = channels
-    puppet.queues['in_queue'].put(msg)
+    await puppet.queues['in_queue'].put(msg)
 
     # needed to break the loop
     msg2 = {}
     msg2['command'] = 'die'
-    puppet.queues['in_queue'].put(msg2)
+    await puppet.queues['in_queue'].put(msg2)
 
-    with pytest.raises(SystemExit):
-        puppet.process_discord_queue()
+    await puppet.process_discord_queue()
 
     puppet.connection.part.assert_called_once_with(puppet.discord_to_irc_links['2'])
     assert puppet.channels == channels
     assert len(puppet.channels) == 2
 
-def test_puppet_process_discord_queue_send(puppet): 
+@pytest.mark.asyncio
+async def test_puppet_process_discord_queue_send(puppet): 
     """Test if inbound queue receives "nick" and processes it"""
     msg = {}
     msg['command'] = 'send'
     msg['channel'] = '3'
     msg['data'] = 'The quick brown fox jumped over the lazy dog.'
 
-    puppet.queues['in_queue'].put(msg)
+    await puppet.queues['in_queue'].put(msg)
 
     # needed to break the loop
     msg2 = {}
     msg2['command'] = 'die'
-    puppet.queues['in_queue'].put(msg2)
+    await puppet.queues['in_queue'].put(msg2)
 
-    with pytest.raises(SystemExit):
-        puppet.process_discord_queue()
+    await puppet.process_discord_queue()
 
     puppet.connection.privmsg.assert_called_once_with(puppet.discord_to_irc_links[msg['channel']], msg['data'])

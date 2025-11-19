@@ -24,46 +24,42 @@ import main
 import ssl
 import socket
 from modules.stats_data import StatsData
-from irc import client
+from irc import client_aio
+import asyncio
 
-from modules.irc_bridge import IRCBot, IRCListener, IRCPuppet
+from modules.irc_bridge import IRCBot, IRCListener, IRCPuppet, BotTemplate
 import threading
-from queue import Queue
 
-def say_hi_and_quit(server: str = 'localhost', port: int = 6667, nickname: str = 'test', channel: str = "#bots", use_ssl: bool = False):
-    """Connect to an IRC server, join a channel, and say hi using the irc library."""
-    
-    reactor = client.Reactor()
+class TestClient(BotTemplate):
+    def __init__(self, irc_config):
+        super().__init__()
+        self.server = irc_config['server']
+        self.port = irc_config['port']
+        self.nickname = irc_config['nickname']
+        self.channel = irc_config['channels'][0]
+        self.config = irc_config
+        self.done = asyncio.Event()
 
-    def on_connect(connection, event):
-        if client.is_channel(channel):
-            connection.join(channel)
+    async def start(self):
 
-    def on_join(connection, event):
-        print(f"Joined {channel}, sending message…")
-        connection.privmsg(channel, "hi")
-        connection.quit()
-        import sys
-        sys.exit()
+        await self.connect_and_retry(self.config['server'], self.config['port'], self.config['nickname'],
+                                     self.config['tls'])
+        self.connection.add_global_handler("welcome", self.on_welcome)
+        self.connection.add_global_handler("join", self.on_join)
+        self.connection.add_global_handler("disconnect", self.on_disconnect)
 
 
-    def on_disconnect(connection, event):
-        print("Disconnected from server.")
-    
-    # Register callbacks
-    reactor.add_global_handler("welcome", on_connect)
-    reactor.add_global_handler("join", on_join)
-    reactor.add_global_handler("disconnect", on_disconnect)
+    def on_welcome(self, connection, event):
+        connection.join(self.channel)
+        task = asyncio.current_task()
+        task.cancel()
 
-    # Set up connection factory (SSL or plain)
-    if use_ssl:
-        ssl_factory = client.connection.Factory(wrapper=ssl.wrap_socket)
-        conn = reactor.server().connect(server, port, nickname, connect_factory=ssl_factory)
-    else:
-        conn = reactor.server().connect(server, port, nickname)
+    def on_join(self, connection, event):
+        print('QUITTING')
+        connection.privmsg(self.channel, "hi")
+        self.connection.disconnect()
+        print('QUIT')
 
-    # Run the reactor loop until the connection closes
-    reactor.process_forever()
 
 @pytest.fixture(scope="function")
 def ssl_proxy():
@@ -157,9 +153,9 @@ def irc_server():
 @pytest.fixture(scope="session", autouse=True)
 def discord_queues():
     return {
-        'irc_to_discord_queue': Queue(),
-        'puppet_queue': Queue(),
-        'dm_out_queue': Queue()
+        'irc_to_discord_queue': asyncio.Queue(),
+        'puppet_queue': asyncio.Queue(),
+        'dm_out_queue': asyncio.Queue()
     }
 
 @pytest.fixture(scope="session", autouse=True)
@@ -184,31 +180,57 @@ def irc_config_ssl():
         'puppet_suffix': '_d2'
     }
 
-def test_irc_server_connection_plain(discord_queues, irc_config, irc_server):
+
+@pytest.mark.asyncio
+async def test_irc_server_connection_plain(discord_queues, irc_config, irc_server):
     data = StatsData()
-    thread = threading.Thread(target=main.run_irclistener,
-                              args=[discord_queues['irc_to_discord_queue'],
-                                    irc_config, data], daemon=True).start()
-    output = irc_server.stdout.readline().strip()
-    assert "Client connected" in output
-    
-def test_irc_server_connection_ssl(discord_queues, irc_config_ssl, irc_server, ssl_proxy):
-    data = StatsData()
-    thread = threading.Thread(target=main.run_irclistener,
-                              args=[discord_queues['irc_to_discord_queue'],
-                                    irc_config_ssl, data], daemon=True).start()
-    output = irc_server.stdout.readline().strip()
-    assert "Client connected" in output
-    
-def test_irc_listener_recived_message(discord_queues, irc_config):
-    data = StatsData()
-    thread = threading.Thread(target=main.run_irclistener,
-                              args=[discord_queues['irc_to_discord_queue'],
-                                    irc_config, data], daemon=True).start()
+    await main.run_irclistener(discord_queues['irc_to_discord_queue'],
+                                    irc_config, data)
     try:
-        say_hi_and_quit()
-    except SystemExit:
+        output = await asyncio.wait_for(
+            asyncio.to_thread(irc_server.stdout.readline),
+            timeout=2.0
+        )
+    except asyncio.TimeoutError:
+        output = ''
+
+    assert "Client connected" in output
+
+@pytest.mark.asyncio
+async def test_irc_server_connection_ssl(discord_queues, irc_config_ssl, irc_server, ssl_proxy):
+    data = StatsData()
+    await main.run_irclistener(discord_queues['irc_to_discord_queue'],
+                               irc_config_ssl, data)
+    try:
+        output = await asyncio.wait_for(
+            asyncio.to_thread(irc_server.stdout.readline),
+            timeout=5.0
+        )
+    except asyncio.TimeoutError:
+        output = ''
         pass
-    import time
-    time.sleep(1)
+
+    assert "Client connected" in output
+
+@pytest.mark.asyncio
+async def test_irc_listener_recived_message(discord_queues, irc_config):
+    data = StatsData()
+    await main.run_irclistener(discord_queues['irc_to_discord_queue'],
+                               irc_config, data)
+
+    test_config = dict(irc_config)
+    test_config['nickname'] = 'tester'
+    bot = TestClient(test_config)
+    await bot.start()
+
+    ticks = 0
+    while discord_queues['irc_to_discord_queue'].qsize() == 0 or ticks == 20:
+        ticks = ticks + .1
+        await asyncio.sleep(.1)
+
     assert discord_queues['irc_to_discord_queue'].qsize() == 1
+    data = await discord_queues['irc_to_discord_queue'].get()
+    assert data['content'] == 'hi'
+    assert data['author'] == 'tester'
+    assert data['error'] == False
+    assert data['channel'] == '#bots'

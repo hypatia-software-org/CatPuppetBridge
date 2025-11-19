@@ -19,8 +19,6 @@ Threads for IRC Bot, Puppet, and Listener
 """
 
 
-import sys
-import threading
 import logging
 import time
 import re
@@ -31,18 +29,19 @@ import asyncio
 
 import psutil
 import irc.bot
-import irc.client
+import irc.client_aio
 import irc.strings
-from irc.connection import Factory
+from irc.connection import AioFactory
 
-class BotTemplate(irc.bot.SingleServerIRCBot):
+class BotTemplate(irc.client_aio.AioSimpleIRCClient):
     """ Shared IRC Bot functionality """
     log = None
-    reconnect_data = None
     ready = False
+    reconnect_data = None
 
     # pylint: disable=super-init-not-called
     def __init__(self):
+        super().__init__()
         self.reactor = self.reactor_class()
         self.recon = irc.bot.ExponentialBackoff()
         self.connection = None
@@ -62,7 +61,7 @@ class BotTemplate(irc.bot.SingleServerIRCBot):
 
         await queue.put(data)
 
-    def connect_and_retry(self, server: str, port: int, nickname: str, tls: bool = False):
+    async def connect_and_retry(self, server: str, port: int, nickname: str, tls: bool = False):
         """ Manage connection and retry rate """
         retry_count = 1
         self.reconnect_data = {'server': server, 'port': port, 'nickname': nickname, 'tls': tls}
@@ -74,35 +73,37 @@ class BotTemplate(irc.bot.SingleServerIRCBot):
                 context.check_hostname = False
                 context.verify_mode = ssl.CERT_NONE
                 context.minimum_version = ssl.TLSVersion.TLSv1_2
-                ssl_factory = Factory(
-                    wrapper=lambda sock: context.wrap_socket(sock,server_hostname=server))
+                ssl_factory = AioFactory(ssl=context)
 
                 try:
                     if self.connection:
-                        self.connect(
+                        print("IRAN4")
+                        await self.connect(
                             server, port, nickname,
                             connect_factory=ssl_factory)
                     else:
-                        self.connection = self.reactor.server().connect(
+                        print("IRAN3")
+                        self.connection = await self.reactor.server().connect(
                             server, port, nickname,
                             connect_factory=ssl_factory)
                     self.log.info('connected with TLS sucessfully to %s:%i',
                                  server, port)
                     self.log.debug('connected sucessfully to %s:%i as %s',
                                   server, port, nickname)
+                    print("IRAN")
                     break
                 except (irc.client.ServerConnectionError, TimeoutError):
                     delay = min(10 * retry_count, 300)
                     self.log.warning('connection failed %i times on %s:%i, retrying in %i',
                                  retry_count, server, port, delay)
                     retry_count = retry_count + 1
-                    time.sleep(delay)
+                    asyncio.sleep(delay)
             else:
                 try:
                     if self.connection:
-                        self.connect(server, port, nickname)
+                        await self.connection.connect(server, port, nickname)
                     else:
-                        self.connection = self.reactor.server().connect(
+                        self.connection = await self.reactor.server().connect(
                             server, port, nickname)
 
                     self.log.info('connected sucessfully to %s:%i',
@@ -115,15 +116,17 @@ class BotTemplate(irc.bot.SingleServerIRCBot):
                     self.log.warning('connection failed %i times on %s:%i, retrying in %i',
                                  retry_count, server, port, delay)
                     retry_count = retry_count + 1
-                    time.sleep(delay)
+                    asyncio.sleep(delay)
 
         self.connection.add_global_handler("disconnect", self.on_disconnect)
 
     def on_disconnect(self, c, e):
         """ When disconnected, try to reconnect """
         self.log.debug("event %s context %s", e, c)
-        self.connect_and_retry(self.reconnect_data['server'], self.reconnect_data['port'],
-                               self.reconnect_data['nickname'], self.reconnect_data['tls'])
+        asyncio.create_task(self.connect_and_retry(self.reconnect_data['server'],
+                                                   self.reconnect_data['port'],
+                                                   self.reconnect_data['nickname'],
+                                                   self.reconnect_data['tls']))
 
 # pylint: disable=too-many-instance-attributes
 class IRCPuppet(BotTemplate):
@@ -139,20 +142,23 @@ class IRCPuppet(BotTemplate):
     def __init__(self, queues, discord_to_irc_links, puppet_config,
                  config):
         super().__init__()
-
+        self.config = dict(config)
         # TODO: ircname
         self.discord_id = puppet_config['discord_id']
         self.queues = queues
         self.channels = puppet_config['channels']
         self.discord_to_irc_links = discord_to_irc_links
 
-        self.config = dict(config)
         self.config.update(puppet_config)
         self.config['webirc_hostname'] = 'discord.bridge'
         self.end_thread = False
 
-        self.connect_and_retry(self.config['server'], self.config['port'], self.config['nickname'],
-                               self.config['tls'])
+    # pylint: disable=invalid-overridden-method
+    async def start(self):
+        await self.connect_and_retry(self.config['server'],
+                                     self.config['port'],
+                                     self.config['nickname'],
+                                     self.config['tls'])
 
         self.connection.send_raw(
                 f"WEBIRC {self.config['webirc_password']} {self.config['webirc_hostname']}"
@@ -178,7 +184,7 @@ class IRCPuppet(BotTemplate):
                 content = "ERROR: User '" + user + "' not found, no such nick exists on irc!"
                 error = True
 
-                asyncio.run(self.send_to_discord(nickname, channel, content,
+                asyncio.create_task(self.send_to_discord(nickname, channel, content,
                                                  self.queues['out_queue'], error=error))
 
     def on_privmsg(self, c, event):
@@ -190,7 +196,10 @@ class IRCPuppet(BotTemplate):
         channel = self.discord_id
         content = event.arguments[0]
 
-        asyncio.run(self.send_to_discord(nickname, channel, content, self.queues['out_queue']))
+        asyncio.create_task(self.send_to_discord(nickname,
+                                                 channel,
+                                                 content,
+                                                 self.queues['out_queue']))
 
     def do_send(self, msg):
         """ Handle sending messages from discord """
@@ -203,12 +212,12 @@ class IRCPuppet(BotTemplate):
                 self.connection.privmsg(
                     self.discord_to_irc_links[str(msg['channel'])], message)
 
-    def process_discord_queue(self):
+    async def process_discord_queue(self):
         """Main worker thread for handling commands form discord"""
-        sentinel = object()
-        for msg in iter(self.queues['in_queue'].get, sentinel):
+        while True:
+            msg = await self.queues['in_queue'].get()
             while not self.ready:
-                time.sleep(1)
+                await asyncio.sleep(0.1)
 
             self.log.debug("Processing command %s", msg)
             match msg['command']:
@@ -230,6 +239,7 @@ class IRCPuppet(BotTemplate):
                 case 'die':
                     self.end_thread = True
                     self.end('has left discord')
+                    break
                 case _:
                     self.log.error("ERROR: Queue command '%s' not found!", msg['command'])
 
@@ -252,12 +262,8 @@ class IRCPuppet(BotTemplate):
         for channel in self.channels:
             self.log.debug("Puppet Joining %s", self.discord_to_irc_links[str(channel)])
             c.join(self.discord_to_irc_links[str(channel)])
-        #self.reactor.scheduler.execute_every(1, self.process_discord_queue)
-        if not self.queue_thread:
-            self.log.debug("starting process_discord_queue thread from puppet")
-            self.queue_thread = threading.Thread(target=self.process_discord_queue, daemon=True)
-            self.queue_thread.start()
-        c.mode(c.get_nickname(), "+R")
+        asyncio.create_task(self.process_discord_queue())
+#        c.mode(c.get_nickname(), "+R")
         self.ready = True
 
     def msg_reserved_bytes(self, target):
@@ -296,15 +302,6 @@ class IRCPuppet(BotTemplate):
         c.nick(c.get_nickname() + "_")
         self.config['nickname'] = c.get_nickname()
 
-    def start(self):
-        """Start the IRC Puppet loop"""
-        self.log.debug("Starting IRC puppet loop for puppet %s", self.config['nickname'])
-        while not self.end_thread:
-            self.reactor.process_once(timeout=0.2)
-        self.log.debug('IRC Puppet killing main thread, %s', self.config['nickname'])
-        sys.exit(0)
-        #self.reactor.process_forever()
-
     def afk(self):
         """Mark nickname as afk"""
         self.connection.send_raw(
@@ -321,7 +318,6 @@ class IRCPuppet(BotTemplate):
         """Kill ourself"""
         self.log.debug('IRC Puppet dying, %s', self.config['nickname'])
         self.connection.disconnect(msg)
-        sys.exit(0)
 
 class IRCListener(BotTemplate):
     """Listener for irc to discord traffic"""
@@ -331,19 +327,25 @@ class IRCListener(BotTemplate):
 
     def __init__(self, out_queue, config, data):
         super().__init__()
+
         self.config = config
         self.data = data
         # TODO: ircname
-        self.connect_and_retry(self.config['server'], self.config['port'],
-                               self.config['listener_nickname'],
-                               self.config['tls'])
 
         self.out_queue = out_queue
+        self.channels = config['channels']
+
+    # pylint: disable=invalid-overridden-method
+    async def start(self):
+        print("IRAN")
+        await self.connect_and_retry(self.config['server'], self.config['port'],
+                               self.config['listener_nickname'],
+                               self.config['tls'])
+        print("IRAN2")
         self.connection.add_global_handler("welcome", self.on_welcome)
         self.connection.add_global_handler("pubmsg", self.on_pubmsg)
         self.connection.add_global_handler("action", self.on_action)
 
-        self.channels = config['channels']
 
     def on_welcome(self, c, e):
         """On IRCd welcome, join channels"""
@@ -363,7 +365,8 @@ class IRCListener(BotTemplate):
 
         if not nickname.endswith(self.config['puppet_suffix']):
             self.log.debug("Irc message found, adding to queue")
-            asyncio.run(self.send_to_discord(nickname, event.target, content, self.out_queue))
+            asyncio.create_task(self.send_to_discord(nickname, event.target,
+                                                     content, self.out_queue))
             self.data.increment('irc_messages')
 
     def on_pubmsg(self, c, event):
@@ -373,27 +376,28 @@ class IRCListener(BotTemplate):
         if not nickname.endswith(self.config['puppet_suffix']):
             self.log.debug("Irc message found, adding to queue")
 
-            asyncio.run(self.send_to_discord(nickname, event.target,
+            asyncio.create_task(self.send_to_discord(nickname, event.target,
                                              event.arguments[0], self.out_queue))
             self.data.increment('irc_messages')
-
-    def start(self):
-        """Start the irc loop, forever"""
-        self.log.debug("Starting IRC client loop...")
-        self.reactor.process_forever()
 
 class IRCBot(BotTemplate):
     """Generic bot for running admin commands on the bridge from IRC"""
 
     channels = None
     stats_data = None
+    config = None
 
     def __init__(self, config, data):
+        self.config = config
         super().__init__()
-        self.connect_and_retry(config['server'], config['port'], config['bot_nickname'],
-                               config['tls'])
+
         self.channel = config['bot_channel']
         self.stats_data = data
+
+    # pylint: disable=invalid-overridden-method
+    async def start(self):
+        await self.connect_and_retry(self.config['server'], self.config['port'],
+                                     self.config['bot_nickname'], self.config['tls'])
         self.connection.add_global_handler("welcome", self.on_welcome)
         self.connection.add_global_handler("pubmsg", self.on_pubmsg)
         self.connection.add_global_handler("privmsg", self.on_privmsg)
@@ -457,8 +461,3 @@ class IRCBot(BotTemplate):
             c.privmsg(nick, "Uptime: " + uptime)
         else:
             c.privmsg(nick, "Not understood: " + cmd)
-
-    def start(self):
-        """Start the irc loop, forever"""
-        self.log.debug("Starting IRC client loop...")
-        self.reactor.process_forever()

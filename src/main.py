@@ -25,7 +25,6 @@ import os.path
 import threading
 import logging
 import time
-from queue import Queue
 import asyncio
 
 from modules.irc_bridge import IRCBot, IRCListener, IRCPuppet
@@ -39,23 +38,23 @@ def run_discord(discord_token, queues, irc_to_discord_links, listener_config, da
     discordbot = DiscordBot(queues, irc_to_discord_links, listener_config, data)
     discordbot.run(discord_token)
 
-def run_ircbot(config, data):
+async def run_ircbot(config, data):
     """Start the IRCBOT thread"""
     # Start IRC Bot
     ircbot = IRCBot(config, data)
-    ircbot.start()
+    asyncio.create_task(ircbot.start())
 
-def run_irclistener(out_queue, config, data):
+async def run_irclistener(out_queue, config, data):
     """Start the IRC Listener thread"""
     # Start IRC Listenr
     ircbot = IRCListener(out_queue, config, data)
-    ircbot.start()
+    asyncio.create_task(ircbot.start())
 
-def run_ircpuppet(queues, discord_to_irc_links, puppet_config, config):
+async def run_ircpuppet(queues, discord_to_irc_links, puppet_config, config):
     """Start a IRC Puppet thread"""
     # Start IRC Puppet
     ircbot = IRCPuppet(queues, discord_to_irc_links, puppet_config, config)
-    ircbot.start()
+    asyncio.create_task(ircbot.start())
 
 def init_config(config_filename='catbridge.ini'):
     """Init our configs, make sure config file can be found"""
@@ -150,7 +149,7 @@ def set_log_level(log_level_str):
     """ Helper to set log level from given string """
     logging.getLogger().setLevel(get_log_level(log_level_str))
 
-def main():
+async def main():
     """Main loop for Cat Puppet Bridge"""
 
     # Init logging
@@ -192,9 +191,10 @@ def main():
 
     discord_queues = {
         'irc_to_discord_queue': asyncio.Queue(),
-        'puppet_queue': Queue(),
+        'puppet_queue': asyncio.Queue(),
         'dm_out_queue': asyncio.Queue()
     }
+
 
     threads = []
     puppet_dict = {}
@@ -202,7 +202,6 @@ def main():
     stats_data = StatsData()
     stats_data.update('uptime', time.time())
 
-    logging.info("starting discord thread")
     threads.append(threading.Thread(target=run_discord,
                                     args=[configs['discord_config']['Token'],
                                           discord_queues,
@@ -210,22 +209,26 @@ def main():
                                           discord_config, stats_data],
                                     daemon=True).start())
 
-    logging.info("starting IRC bot thread")
-    threads.append(threading.Thread(target=run_ircbot,
-                                    args=[irc_config, stats_data], daemon=True).start())
+    logging.info("starting IRC bot task")
+    await run_ircbot(irc_config, stats_data)
 
-    logging.info("starting IRC listener thread")
-    threads.append(threading.Thread(target=run_irclistener,
-                                    args=[discord_queues['irc_to_discord_queue'],
-                                          irc_config, stats_data], daemon=True).start())
+    logging.info("starting IRC listener task")
+    await run_irclistener(discord_queues['irc_to_discord_queue'],
+                    irc_config, stats_data)
 
-    for user in iter(discord_queues['puppet_queue'].get, object()):
+    while True:
+        try:
+            user = discord_queues['puppet_queue'].get_nowait()
+        except asyncio.QueueEmpty:
+            await asyncio.sleep(.1)
+            continue
+        await asyncio.sleep(.1)
         if user['command'] == 'active':
             # Does the puppet already exist? Start it! Otherwise do nothing
             if user['id'] not in puppet_dict:
                 logging.debug("Starting IRC Puppet: %s", user['irc_nick'])
                 logging.info("starting IRC Puppet")
-                puppet_main_queues[user['id']] = Queue()
+                puppet_main_queues[user['id']] = asyncio.Queue()
                 puppet_nickname = user['irc_nick'] + configs['irc_config']['PuppetSuffix']
                 puppet_config = {
                     'channels': user['data'],
@@ -233,22 +236,21 @@ def main():
                     'webirc_ip': ula_address_from_string(puppet_nickname),
                     'discord_id': user['id']
                     }
-                ircpuppet_thread = threading.Thread(
-                    target=run_ircpuppet,
-                    args=[{
+                ircpuppet_task = await run_ircpuppet(
+                    {
                         'in_queue': puppet_main_queues[user['id']],
                         'out_queue': discord_queues['dm_out_queue']
-                        }, configs['discord_to_irc_links'],
-                          puppet_config, irc_config],
-                    daemon=True)
-                ircpuppet_thread.start()
+                    },
+                    configs['discord_to_irc_links'],
+                    puppet_config, irc_config)
+
                 stats_data.increment('total_puppets')
 
-                puppet_dict[user['id']] = ircpuppet_thread
+                puppet_dict[user['id']] = ircpuppet_task
         elif user['command'] == 'die':
             logging.debug("stopping IRC Puppet: %s", user['irc_nick'])
             logging.info("stopping IRC Puppet")
-            puppet_main_queues[user['id']].put(user)
+            await puppet_main_queues[user['id']].put(user)
             puppet_dict[user['id']].join()
             del puppet_dict[user['id']]
             stats_data.decrement('total_puppets')
@@ -256,7 +258,7 @@ def main():
             if user['command'] == 'nick':
                 user['irc_nick'] += configs['irc_config']['PuppetSuffix']
             try:
-                puppet_main_queues[user['id']].put(user)
+                await puppet_main_queues[user['id']].put(user)
             except KeyError as e:
                 logging.error("Failed to add irc command to queue, missing %i", user['id'])
                 logging.error(e)
@@ -264,4 +266,4 @@ def main():
         t.join()
 
 if __name__ == "__main__":
-    main()
+    asyncio.run(main())
