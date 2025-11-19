@@ -121,7 +121,6 @@ class BotTemplate(irc.client_aio.AioSimpleIRCClient):
 
     def on_disconnect(self, c, e):
         """ When disconnected, try to reconnect """
-        print("IRAN DISCONNECT")
         self.log.debug("event %s context %s", e, c)
         asyncio.create_task(self.connect_and_retry(self.reconnect_data['server'], self.reconnect_data['port'],
                                self.reconnect_data['nickname'], self.reconnect_data['tls']))
@@ -152,7 +151,6 @@ class IRCPuppet(BotTemplate):
         self.end_thread = False
 
     async def start(self):
-        print("CONNECT AND RETRY RUN")
         await self.connect_and_retry(self.config['server'], self.config['port'], self.config['nickname'],
                                self.config['tls'])
 
@@ -339,10 +337,6 @@ class IRCListener(BotTemplate):
 
 
     def on_welcome(self, c, e):
-        print("Conn object:", id(self.connection))
-        print("Connection object (event):", id(c))
-        print("Connection object (self):", id(self.connection))
-
         """On IRCd welcome, join channels"""
         for channel in self.channels:
             self.log.debug("Listener joining %s", channel)
@@ -366,7 +360,6 @@ class IRCListener(BotTemplate):
     def on_pubmsg(self, c, event):
         """On public messages, relay to discord"""
         self.log.debug("c %s", c)
-        print('i ran')
         nickname = event.source.split('!', 1)[0]
         if not nickname.endswith(self.config['puppet_suffix']):
             self.log.debug("Irc message found, adding to queue")
