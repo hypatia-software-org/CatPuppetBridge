@@ -25,7 +25,12 @@ import asyncio
 import emoji
 import discord
 
+from discord.http import Route, _set_api_version, INTERNAL_API_VERSION
+import yarl
+
 from modules.discord_filters import DiscordFilters
+
+from discord.gateway import DiscordWebSocket
 
 
 class DiscordBot(discord.Client):
@@ -41,6 +46,13 @@ class DiscordBot(discord.Client):
     sessions = {}
 
     def __init__(self, queues, irc_to_discord_links, discord_config, data):
+
+        if discord_config['mode'] == 'spacebar':
+            _set_api_version(9)
+            DiscordWebSocket.DEFAULT_GATEWAY = yarl.URL(discord_config['gateway'])
+            Route.BASE = discord_config['api']
+            INTERNAL_API_VERSION=9
+
         intents = discord.Intents.default()
         intents.message_content = True
         intents.members = True
@@ -458,6 +470,8 @@ class DiscordBot(discord.Client):
             return
 
         user = self.guilds[0].get_member(message.author.id)
+        if not user:
+            user = await self.guilds[0].fetch_member(message.author.id)
 
         if user.id not in self.active_puppets:
             await self.activate_puppet(user)

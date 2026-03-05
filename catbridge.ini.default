@@ -18,6 +18,12 @@
 # Valid log levels are: debug, info, warn, error
 log_level = info
 
+#################
+# spacebar_mode #
+#################
+# To enable spacebar mode set to `true`, requires a `[Spacebar]` block to be set
+spacebar_mode = false
+
 [Links]
 ###############
 # Links Block #
@@ -104,4 +110,22 @@ WebIRCPassword =
 # Token #
 #########
 # Discord token
-Token = 
+Token =
+
+[Spacebar]
+##################
+# Spacebar Block #
+##################
+# Specific configuration for Spacebar intergration
+
+#######
+# api #
+#######
+# URL for the Spacebar API
+#api = https://example.com/api/v9
+
+###########
+# gateway #
+###########
+# URL for the Spacebar websocket gateway
+#gateway = wws://gateway.example.com/
