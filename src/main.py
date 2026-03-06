@@ -100,7 +100,6 @@ def read_config(irc_required: list, discord_required: list, config, config_path:
         sys.exit(1)
 
     discord_config = config['Discord']
-    discord_config['mode'] = 'discord'
     check_required(discord_required, discord_config, 'Discord')
 
     if 'Links' not in config:
@@ -124,27 +123,6 @@ def read_config(irc_required: list, discord_required: list, config, config_path:
             global_config[entry] = config['Global'][entry]
     if 'log_level' not in global_config:
         global_config['log_level'] = 'info'
-
-    # Manage spacebar mode
-    if 'spacebar_mode' not in global_config:
-        global_config['spacebar_mode'] = False
-    elif global_config['spacebar_mode'] == 'true':
-        global_config['spacebar_mode'] = True
-        logging.info("Spacebar mode has been enabled")
-        discord_config['mode'] == 'spacebar'
-
-    if global_config['spacebar_mode'] == True:
-        if 'Spacebar' not in config:
-            logging.error("Spacebar block missing in %s", config_path)
-            sys.exit(1)
-        if 'api' not in config['Spacebar']:
-            logging.error("api missing in Spacebar block %s", config_path)
-            sys.exit(1)
-        if 'gateway' not in config['Spacebar']:
-            logging.error("gateway missing in Spacebar block %s", config_path)
-            sys.exit(1)
-        discord_config['api'] = config['Spacebar']['api']
-        discord_config['gateway'] = config['Spacebar']['gateway']
 
     return {'irc_config': irc_config,
             'discord_config': discord_config,
