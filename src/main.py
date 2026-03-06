@@ -131,7 +131,10 @@ def read_config(irc_required: list, discord_required: list, config, config_path:
     elif global_config['spacebar_mode'] == 'true':
         global_config['spacebar_mode'] = True
         logging.info("Spacebar mode has been enabled")
-        discord_config['mode'] == 'spacebar'
+        discord_config['mode'] = 'spacebar'
+
+    discord_config['api'] = ''
+    discord_config['gateway'] = ''
 
     if global_config['spacebar_mode'] == True:
         if 'Spacebar' not in config:
@@ -199,7 +202,10 @@ def main():
 
     discord_config = {'puppet_suffix': configs['irc_config']['PuppetSuffix'],
                       'puppet_min_size': int(configs['irc_config']['PuppetDisplayNameMinSize']),
-                      'log_level': get_log_level(configs['global_config']['log_level'])}
+                      'log_level': get_log_level(configs['global_config']['log_level']),
+                      'mode': configs['discord_config']['mode'],
+                      'api': configs['discord_config']['api'],
+                      'gateway': configs['discord_config']['gateway']}
     irc_config = {
         'puppet_suffix': configs['irc_config']['PuppetSuffix'],
         'tls': configs['irc_config']['TLS'],
